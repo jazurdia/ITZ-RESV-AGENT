@@ -20,17 +20,19 @@ def main():
 
     #load_db()
 
-    # Ejemplo de pregunta del usuario:
-    pregunta = "Genera una tabla con la ocupacion por mes, para 2024. "
-    pregunta = "Segun la inforamacion disponible, encuentra los tres meses con ocupacion mas baja. Excluye a partir de Marzo de 2025. "
-    pregunta = input("> ")
+    while True:
+        print("########################################################")
+        # Ejemplo de pregunta del usuario:
+        pregunta = "Genera una tabla con la ocupacion por mes, para 2024. "
+        pregunta = "Segun la inforamacion disponible, encuentra los tres meses con ocupacion mas baja. Excluye a partir de Marzo de 2025. "
+        pregunta = input("> ")
 
-    # Ejecutar el agente coordinador con la pregunta:
-    resultado = Runner.run_sync(reservations_agent, pregunta)
+        # Ejecutar el agente coordinador con la pregunta:
+        resultado = Runner.run_sync(reservations_agent, pregunta)
 
-    # Obtener la respuesta final estructurada:
-    respuesta_final = resultado.final_output  # debería ser un objeto response_output
-    print(respuesta_final)
+        # Obtener la respuesta final estructurada:
+        respuesta_final = resultado.final_output  # debería ser un objeto response_output
+        print(respuesta_final)
 
 
 
