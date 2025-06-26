@@ -1,7 +1,7 @@
-from load_xlsx_to_sqlite import load_reservations_to_sqlite, load_grouped_accounts_to_sqlite, delete_itzana_db, reservations_schema, groupedaccounts_schema
+from load_xlsx_to_sqlite import load_reservations_to_sqlite, load_grouped_accounts_to_sqlite, delete_itzana_db
 from dotenv import load_dotenv
 from agents import Runner
-from ItzanaAgents import coordinator_agent, reservations_agent
+from ItzanaAgents import reservations_agent
 
 load_dotenv()
 
@@ -10,7 +10,7 @@ def load_db():
     # Borrando DB. 
     delete_itzana_db()
 
-    reservations_loaded = load_reservations_to_sqlite("data/itzana_reservations.xlsx")
+    reservations_loaded = load_reservations_to_sqlite("data/reservations.xlsx")
     accounts_loaded = load_grouped_accounts_to_sqlite("data/grouped_accounts.xlsx")
 
     print(f"Reservaciones cargadas a slqite: {reservations_loaded}")
@@ -18,8 +18,12 @@ def load_db():
 
 def main():
 
+    #load_db()
+
     # Ejemplo de pregunta del usuario:
-    pregunta = "¿Cuál fue el ingreso total según los datos de cuentas agrupadas en 2022?"
+    pregunta = "Genera una tabla con la ocupacion por mes, para 2024. "
+    pregunta = "Segun la inforamacion disponible, encuentra los tres meses con ocupacion mas baja. Excluye a partir de Marzo de 2025. "
+    pregunta = input("> ")
 
     # Ejecutar el agente coordinador con la pregunta:
     resultado = Runner.run_sync(reservations_agent, pregunta)
@@ -31,7 +35,6 @@ def main():
 
 
 if __name__ == "__main__":
-    load_db()
 
     main()
 
