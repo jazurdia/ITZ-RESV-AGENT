@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from ItzanaAgents import reservations_agent
 from load_xlsx_to_sqlite import (
@@ -35,8 +35,12 @@ async def query_agent(request: QueryRequest):
     """
     Recibe un JSON con el campo 'question' y devuelve la respuesta estructurada del agente.
     """
-    resultado = await Runner.run(reservations_agent, request.question)
-    return resultado.final_output
+    try:
+        resultado = await Runner.run(reservations_agent, request.question)
+        return resultado.final_output
+    except Exception as e:
+        # Captura errores de ejecución del agente y devuelve un HTTP 500 con detalle
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
 @app.post("/reload", summary="Recarga la base de datos desde los archivos XLSX")
 async def reload_db():
