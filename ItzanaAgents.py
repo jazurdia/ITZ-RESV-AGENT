@@ -14,7 +14,7 @@ class analysis_output(BaseModel):
 def execute_query_to_sqlite(query: str) -> Any:
     """Ejecuta la consulta SQL proporcionada en Itzana.db y devuelve los resultados en formato JSON."""
 
-    print(f"Query > {query}")
+    #print(f"Query > {query}")
 
     conn = None
     try:
@@ -61,6 +61,7 @@ reservations_agent = Agent(
     tools=[execute_query_to_sqlite],       # herramienta para ejecutar consultas SQL
     output_type=str,           # espera devolver returned_json e interpretation
 )
+
 
 
 
