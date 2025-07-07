@@ -1,16 +1,39 @@
 import base64
 import io
-import json
 import sqlite3
 from typing import Any, Dict, List
+
 from typing_extensions import TypedDict, NotRequired
-from matplotlib import pyplot as plt
+
 import pandas as pd
-from pydantic import BaseModel
-from agents import Agent, function_tool, AgentOutputSchema
+from matplotlib import pyplot as plt
+
+from agents import Agent, function_tool, AgentOutputSchema, handoff
+from agents.tool import FunctionTool
+
 from load_xlsx_to_sqlite import reservations_schema, groupedaccounts_schema
 
-from typing_extensions import TypedDict
+
+# Esquema que permite cualquier columna adicional en cada fila de “data”
+raw_schema = {
+  "type": "object",
+  "additionalProperties": False,
+  "properties": {
+    "data":       {"type": "array", "items": {"type": "object", "additionalProperties": True}},
+    "chart_type": {"type": "string"},
+    "x":          {"type": "string"},
+    "y":          {"type": "string"}
+  },
+  # ahora incluimos todas las keys, incluidas "y"
+  "required": ["data", "chart_type", "x", "y"]
+}
+
+params_schema = raw_schema
+
+
+# Convertimos en esquema “estricto” para el SDK, pero dejando additionalProperties = true
+
+
 
 #########################################################
 ##############  ANALISIS DE RESERVACIONES  ##############
@@ -87,75 +110,89 @@ reservations_agent = Agent(
 #########################################################
 ##############      Agente Graficador      ##############
 #########################################################
+
 class GraphOutput(TypedDict):
     returned_json: List[Dict[str, Any]]
     interpretation: str
     userQuery: str
     imgb64: str
 
-
-@function_tool(strict_json_schema=False)
-def generate_graphs(
-    data: List[Dict[str, Any]],
+def _generate_graphs_impl(
+    data_json: str,
     chart_type: str,
     x: str,
     y: str = ""
 ) -> str:
+    # 1) parsea el JSON string
+    data = pd.json.loads(data_json)
+    # 2) procede con la misma lógica:
     df = pd.DataFrame(data)
-    chart_type = chart_type.lower()
-    
-    plt.figure(figsize=(10, 6))
-    try:
-        if chart_type == "bar":
-            plt.bar(df[x], df[y])
-        elif chart_type == "line":
-            df[x] = pd.to_datetime(df[x], errors='ignore')
-            df = df.sort_values(by=x)
-            plt.plot(df[x], df[y], marker='o')
-            plt.xticks(rotation=45)
-        elif chart_type == "pie":
-            plt.pie(df[y], labels=df[x], autopct='%1.1f%%')
-        else:
-            return ""
-    except Exception:
-        return ""
-
-    plt.title(f"{chart_type.capitalize()} Chart: {y} by {x}")
+    ct = chart_type.lower()
+    plt.figure(figsize=(10,6))
+    if ct == "bar":
+        plt.bar(df[x], df[y])
+    elif ct == "line":
+        df[x] = pd.to_datetime(df[x], errors="ignore")
+        df = df.sort_values(by=x)
+        plt.plot(df[x], df[y], marker="o")
+        plt.xticks(rotation=45)
+    elif ct == "pie":
+        plt.pie(df[y], labels=df[x], autopct="%1.1f%%")
+    plt.title(f"{ct.capitalize()} Chart: {y} by {x}")
     plt.tight_layout()
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
-    img_b64 = base64.b64encode(buffer.read()).decode('utf-8')
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    img = base64.b64encode(buf.read()).decode("utf-8")
     plt.close()
-    return img_b64
+    return img
+
+generate_graphs_tool = FunctionTool(
+    name="generate_graphs",
+    description="Genera un gráfico PNG en base64 a partir de un string JSON de datos tabulares.",
+    params_json_schema=params_schema,
+    on_invoke_tool=lambda _ctx, args: _generate_graphs_impl(
+        args["data_json"],
+        args["chart_type"],
+        args["x"],
+        args.get("y", "")
+    )
+)
+
 
 graph_generator_instructions = """
-Eres un agente que genera gráficos a partir de datos tabulares.
-Recibes tres cosas: 
-- `returned_json`: una tabla de datos (lista de diccionarios con claves como columnas)
-- `interpretation`: una explicación en texto de esos datos
-- `userQuery`: la pregunta original del usuario
+Eres un agente especializado en generar gráficos a partir de datos tabulares. Recibes tres entradas:
+- `returned_json`: una lista de diccionarios con los datos de la consulta.
+- `interpretation`: una explicación en texto de lo que significan esos datos.
+- `userQuery`: la pregunta original del usuario.
 
-Tu tarea es:
-1. Analizar los datos y la pregunta.
-2. Elegir el tipo de gráfico más adecuado: "bar", "line", "pie", etc.
-3. Elegir las columnas `x` e `y` apropiadas del `returned_json`.
-4. Llamar a la herramienta `generate_graphs`, pasándole directamente:
-   - `data`: el valor de `returned_json`
-   - `chart_type`: el tipo de gráfico a generar (ej: "bar", "line", "pie")
-   - `x`: nombre de la columna para el eje X
-   - `y`: nombre de la columna para el eje Y (si aplica; puede estar vacío en pie charts)
+Tu flujo de trabajo debe ser:
 
-5. Devuelve como resultado final un objeto JSON con la siguiente forma:
+1. Preparar el payload serializando `returned_json` a JSON:
+   data_json = json.dumps(returned_json)
 
+2. Elegir el gráfico más adecuado según la pregunta y los datos:
+   - chart_type: "bar", "line" o "pie"
+   - x: columna para el eje X
+   - y: columna para el eje Y (o "" si no aplica)
+
+3. Invocar la herramienta:
+   generate_graphs(
+     data_json=data_json,
+     chart_type=chart_type,
+     x=x,
+     y=y
+   )
+
+4. Formar la respuesta devolviendo exclusivamente un objeto JSON con:
 {
-  "returned_json": [...],
-  "interpretation": "...",
-  "userQuery": "...",
-  "imgb64": "..."  # gráfico codificado en base64
+  "returned_json": returned_json,
+  "interpretation": interpretation,
+  "userQuery": userQuery,
+  "imgb64": imgb64
 }
 
-No escribas explicaciones adicionales. No escribas código Python. Solo devuelve el objeto JSON con esos campos.
+No escribas explicaciones adicionales ni código Python; solo devuelve ese JSON.
 """
 
 
@@ -164,40 +201,39 @@ graph_generator_agent = Agent(
     name="Graph Generator Agent",
     instructions=graph_generator_instructions,
     model="gpt-4.1",
-    tools=[generate_graphs],
+    tools=[generate_graphs_tool],               # ← aquí
     output_type=AgentOutputSchema(GraphOutput, strict_json_schema=False)
 )
+
 
 
 #########################################################
 ##############      Agente Coordinador     ##############
 #########################################################
 
-GRAPH_KEYWORDS = ["grafica", "gráfico", "gráfica", "visualiza", "visualización", "diagrama", "imagen", "representa"]
+# Palabras clave para petición de gráfico
+GRAPH_KEYWORDS = [
+    "grafica", "gráfico", "gráfica",
+    "visualiza", "visualización",
+    "diagrama", "imagen", "representa"
+]
 
 class FinalOutput(TypedDict):
     returned_json: List[Dict[str, Any]]
     interpretation: str
     userQuery: str
-    imgb64: NotRequired[str]
+    imgb64: NotRequired[str]  # Solo si hay gráfico
 
-coordinator_instructions = """
-Eres un agente coordinador. Tu tarea es recibir la pregunta del usuario y decidir qué agentes deben intervenir.
+coordinator_instructions = f"""
+Eres un agente coordinador. Tu única tarea es delegar mediante las funciones automáticas transfer_to_*:
 
-1. Siempre debes comenzar usando `handoff` con el `ReservationsAgent`, pasándole directamente la pregunta del usuario.
+1. Primero emite:
+{{"assistant": "transfer_to_ReservationsAgent", "input": userQuery}}
 
-2. Una vez recibas la respuesta (un JSON con los campos `returned_json`, `interpretation`, `userQuery`), analiza si la `userQuery` contiene alguna de estas palabras clave:
-   - "gráfico", "gráfica", "grafica", "visualiza", "visualización", "diagrama", "imagen", "representa"
+2. Si la pregunta contiene alguna de estas palabras clave: {GRAPH_KEYWORDS}, inmediatamente después emite:
+{{"assistant": "transfer_to_GraphGeneratorAgent", "input": <resultado del primer handoff>}}
 
-3. Si contiene alguna de esas palabras, haz un segundo `handoff`, esta vez al `Graph Generator Agent`, y pásale el mismo JSON.
-
-4. Devuelve como resultado final un objeto JSON con los campos:
-   - `returned_json`
-   - `interpretation`
-   - `userQuery`
-   - `imgb64` (solo si se pidió un gráfico; si no, este campo puede omitirse)
-
-Nunca generes gráficos ni SQL por tu cuenta. Usa `handoff`.
+3. Finalmente, devuelve solo la salida del último handoff realizado (sin texto adicional).
 """
 
 
@@ -206,10 +242,9 @@ coordinator_agent = Agent(
     instructions=coordinator_instructions,
     model="gpt-4.1",
     tools=[],
-    allowed_agents=[reservations_agent, graph_generator_agent],
+    handoffs=[
+        reservations_agent.as_tool(tool_name="Reservation Analyzer", tool_description="performs a sql query over the database and analyzes the result"), 
+        graph_generator_agent.as_tool(tool_name="Graphicator", tool_description="creates graphics given the result of Reservation Analyzer")
+        ],
     output_type=AgentOutputSchema(FinalOutput, strict_json_schema=False)
 )
-
-
-
-
