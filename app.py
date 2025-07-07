@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from ItzanaAgents import reservations_agent, coordinator_agent
+from ItzanaAgents import reservations_agent
 from load_xlsx_to_sqlite import (
     load_reservations_to_sqlite,
     load_grouped_accounts_to_sqlite,
@@ -32,21 +32,11 @@ app = FastAPI(
 
 @app.post("/ask", summary="Pregunta al agente.")
 async def query_agent(request: QueryRequest):
-
     """
-    Recibe una pregunta del usuario, y el agente coordinador decide:
-    - Ejecutar la consulta SQL con el agente de reservaciones
-    - Opcionalmente generar un gráfico si la pregunta lo solicita
-
-    Devuelve:
-    - `returned_json`
-    - `interpretation`
-    - `userQuery`
-    - `imgb64` (solo si aplica)
+    Recibe un JSON con el campo 'question' y devuelve la respuesta estructurada del agente.
     """
-
     try:
-        resultado = await Runner.run(coordinator_agent, request.question)
+        resultado = await Runner.run(reservations_agent, request.question)
         return resultado.final_output
     except Exception as e:
         # Captura errores de ejecución del agente y devuelve un HTTP 500 con detalle
