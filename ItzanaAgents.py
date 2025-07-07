@@ -11,10 +11,17 @@ class AnalysisOutput(TypedDict):
     """
     Esquema de salida estricto:
     - returned_json: lista de objetos con los resultados de la consulta
-    - interpretation: texto con la interpretación
+    - key_findings: resumen de los hallazgos principales
+    - methodology: descripción del proceso y filtros aplicados
+    - results_interpretation: interpretación de lo que significan los datos
+    - conclusion: conclusiones y próximos pasos
     """
     returned_json: List[Dict[str, Any]]
-    interpretation: str
+    key_findings: str
+    methodology: str
+    results_interpretation: str
+    conclusion: str
+
 
 
 @function_tool
@@ -46,19 +53,27 @@ El esquema de la tabla `reservations` es el siguiente: {reservations_schema()}.
 
 Tu tarea es, a partir de la pregunta del usuario, **generar una consulta SQL (SQLite)** sobre la tabla `reservations` que permita responder a la pregunta. Debes razonar qué datos solicitar.
 
-Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to_sqlite` para obtener los datos en formato JSON. **Luego, debes entregar tu respuesta en un JSON con dos campos**:
-- `returned_json`: el resultado devuelto por la consulta (en JSON).
-- `interpretation`: una interpretación en texto de ese `returned_json` (qué significan los datos o la respuesta a la pregunta del usuario).
+Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to_sqlite` para obtener los datos en formato JSON. **Luego, debes entregar tu respuesta en un JSON con los siguientes campos**:
 
-Devolver únicamente un objeto JSON válido con este esquema:
-   {{
-     "returned_json": [...],
-     "interpretation": "..."
-   }}
+- `returned_json`: el resultado devuelto por la consulta (en JSON).
+- `methodology`: descripción del proceso, filtros o agregaciones aplicados sin mencionar nombres de columna. 
+- `results_interpretation`: interpretación de lo que significan los datos en el contexto de negocio. Debe ser extenso. 
+- `key_findings`: resumen de los hallazgos principales extraídos de `returned_json`.
+- `conclusion`: conclusiones y próximos pasos sugeridos.
+
+Devuelve **solo** un objeto JSON válido con este esquema:
+
+{{
+  "returned_json": [...],
+  "key_findings": "...",
+  "methodology": "...",
+  "results_interpretation": "...",
+  "conclusion": "..."
+}}
 
 NOTAS:
 - Si la pregunta menciona wholesalers, debes usar el campo COMPANY_NAME.
-- Sin explicación adicional ni código; solo produce el objeto JSON con los campos `returned_json` e `interpretation`.
+
 """
 
 reservations_agent = Agent(
