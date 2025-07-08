@@ -3,9 +3,16 @@ import sqlite3
 from typing import Any, List, Dict
 from pydantic import BaseModel
 from agents import Agent, function_tool, AgentOutputSchema
+from agents.tool import FunctionTool
 from load_xlsx_to_sqlite import reservations_schema, groupedaccounts_schema
 
+from helper import _graph_all_in_one_impl, graph_tool_schema
+
 from typing_extensions import TypedDict
+
+# ----------------------------------
+#         Analysis Agent 
+# ----------------------------------
 
 class AnalysisOutput(TypedDict):
     """
@@ -21,8 +28,6 @@ class AnalysisOutput(TypedDict):
     methodology: str
     results_interpretation: str
     conclusion: str
-
-
 
 @function_tool
 def execute_query_to_sqlite(query: str) -> Any:
@@ -83,4 +88,66 @@ reservations_agent = Agent(
     tools=[execute_query_to_sqlite],
     output_type=AgentOutputSchema(AnalysisOutput, strict_json_schema=False)
 
+)
+
+# ----------------------------------
+#       Graphicator Agent 
+# ----------------------------------
+
+# --- Esquema de salida para la decisión ---
+class GraphChoice(TypedDict):
+    chart_type: str
+    x: str
+    y: str
+
+# --- El único FunctionTool: decide_chart_type_xy ---
+@function_tool
+def decide_graph(data_json: str, userQuery: str) -> GraphChoice:
+    """
+    data_json: JSON-string de returned_json (la tabla).
+    userQuery: la pregunta original.
+    Devuelve un JSON con chart_type, x, y.
+    """
+    table = json.loads(data_json)
+    first = table[0] if table else {}
+    q = userQuery.lower()
+
+    # 1) Tipo de gráfico
+    if "line" in q or "tendencia" in q:
+        ct = "line"
+    elif "pie" in q or "%" in q or "torta" in q:
+        ct = "pie"
+    else:
+        ct = "bar"
+
+    # 2) Eje X: primer campo de texto
+    text_cols = [k for k,v in first.items() if isinstance(v, str)]
+    x = text_cols[0] if text_cols else next(iter(first), "")
+
+    # 3) Eje Y: primer campo numérico distinto de X
+    y = ""
+    for k,v in first.items():
+        if k != x and isinstance(v, (int, float)):
+            y = k
+            break
+
+    return {"chart_type": ct, "x": x, "y": y}
+
+# --- Agente que usa sólo ese tool ---
+graph_decider_instructions = """
+Eres un agente que decide el tipo de gráfico y los ejes.
+Recibes dos parámetros:
+- data_json: un string JSON con la lista returned_json.
+- userQuery: la pregunta original.
+
+Debes invocar la herramienta decide_graph con esos dos parámetros
+y devolver únicamente su salida (el JSON con chart_type, x, y).
+"""
+
+graph_decider_agent = Agent(
+    name="GraphDeciderAgent",
+    instructions=graph_decider_instructions,
+    model="gpt-4.1",
+    tools=[decide_graph],
+    output_type=AgentOutputSchema(GraphChoice, strict_json_schema=False)
 )
