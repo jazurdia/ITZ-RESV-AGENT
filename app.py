@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from ItzanaAgents import reservations_agent
+from ItzanaAgents import reservations_agent, graph_decider_agent
 from load_xlsx_to_sqlite import (
     load_reservations_to_sqlite,
     load_grouped_accounts_to_sqlite,
@@ -9,13 +9,17 @@ from load_xlsx_to_sqlite import (
 from agents import Runner
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+
+from helper import _generate_graphs_impl
 
 import json
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 
+from helper import format_as_markdown
 
+import traceback
 
 
 load_dotenv()
@@ -35,37 +39,79 @@ app = FastAPI(
     title="Itzana Agents API",
     description="API para ejecutar los agentes de análisis (currently 1)",
     version="1.0.0",
-    lifespan=lifespan
+    # lifespan=lifespan
 )
 
-class output_ask(BaseModel):
+class OutputAsk(BaseModel): # creo que ya no se usa. 
+    title: str
     returned_json: List[Dict[str, Any]]
     key_findings: str
     methodology: str
     results_interpretation: str
+    recommendations: str
     conclusion: str
+    imgb64: Optional[str] = None
 
-@app.post("/ask", summary="Pregunta al agente.", response_model=output_ask)
+class outputAsk2(BaseModel):
+    markdown : str
+
+
+GRAPH_KEYWORDS = [
+    "grafica", "gráfico", "gráfica",
+    "grafico", "visualiza", "visualización",
+    "diagrama", "imagen", "representa"
+]
+
+@app.post("/ask", response_model=outputAsk2)
 async def query_agent(request: QueryRequest):
-    """
-    Recibe un JSON con el campo 'question' y devuelve la respuesta estructurada del agente.
-    """
     try:
-        resultado = await Runner.run(reservations_agent, request.question)
+        # 1) Llamas al agente SQL
+        resp = await Runner.run(reservations_agent, request.question)
+        raw: Dict[str, Any] = resp.final_output  # dict con your analysis
 
-        raw = resultado.final_output
+        try: 
+            # 2) Si pide gráfico, decides parámetros
+            if any(k in request.question.lower() for k in GRAPH_KEYWORDS):
+                data_json = json.dumps(raw["returned_json"])
+                # 3) Invoca al agente decidor (siempre recibe un STRING)
+                payload = json.dumps({"data_json": data_json, "userQuery": request.question})
+                dec = await Runner.run(graph_decider_agent, payload)
+                choice: Dict[str, str] = dec.final_output
 
-        output = jsonable_encoder(raw)
+                # 4) Generas la gráfica tú mismo
+                raw["imgb64"] = _generate_graphs_impl(
+                    raw["returned_json"],
+                    choice["chart_type"],
+                    choice["x"],
+                    choice["y"]
+                )
 
-        if isinstance(output, str):
-            output = json.loads(output)
+        except Exception as e:
+            print("no se pudo generar la imagen. ")
+            raw["imgb64"] = None
 
-        return JSONResponse(content=output)
+        # 3. Formatear como Markdown
+        md = format_as_markdown(
+            title = raw["title"],
+            resp={"returned_json": raw["returned_json"]},
+            key_findings=raw["key_findings"],
+            methodology=raw["methodology"],
+            interpretation=raw["results_interpretation"],
+            recommendations = raw["recommendations"],
+            conclusion=raw["conclusion"],
+            imgb64=raw.get("imgb64")
+        )
 
-        
+        # 4. Devolver solo el Markdown como JSON
+        return outputAsk2(markdown=md)
+
     except Exception as e:
-        # Captura errores de ejecución del agente y devuelve un HTTP 500 con detalle
-        raise HTTPException(status_code=500, detail={"error": str(e)})
+        tb = traceback.format_exc()
+        raise HTTPException(
+            status_code=500,
+            detail={"error": str(e), "traceback": tb}
+        )
+
 
 @app.post("/reload", summary="Recarga la base de datos desde los archivos XLSX")
 async def reload_db():
