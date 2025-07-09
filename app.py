@@ -17,8 +17,9 @@ import json
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 
-import traceback
+from helper import format_as_markdown
 
+import traceback
 
 
 load_dotenv()
@@ -41,14 +42,19 @@ app = FastAPI(
     # lifespan=lifespan
 )
 
-class OutputAsk(BaseModel):
+class OutputAsk(BaseModel): # creo que ya no se usa. 
+    title: str
     returned_json: List[Dict[str, Any]]
     key_findings: str
     methodology: str
     results_interpretation: str
+    recommendations: str
     conclusion: str
     imgb64: Optional[str] = None
-    
+
+class outputAsk2(BaseModel):
+    markdown : str
+
 
 GRAPH_KEYWORDS = [
     "grafica", "gráfico", "gráfica",
@@ -56,31 +62,48 @@ GRAPH_KEYWORDS = [
     "diagrama", "imagen", "representa"
 ]
 
-@app.post("/ask", response_model=OutputAsk)
+@app.post("/ask", response_model=outputAsk2)
 async def query_agent(request: QueryRequest):
     try:
         # 1) Llamas al agente SQL
         resp = await Runner.run(reservations_agent, request.question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
 
-        # 2) Si pide gráfico, decides parámetros
-        if any(k in request.question.lower() for k in GRAPH_KEYWORDS):
-            data_json = json.dumps(raw["returned_json"])
-            # 3) Invoca al agente decidor (siempre recibe un STRING)
-            payload = json.dumps({"data_json": data_json, "userQuery": request.question})
-            dec = await Runner.run(graph_decider_agent, payload)
-            choice: Dict[str, str] = dec.final_output
+        try: 
+            # 2) Si pide gráfico, decides parámetros
+            if any(k in request.question.lower() for k in GRAPH_KEYWORDS):
+                data_json = json.dumps(raw["returned_json"])
+                # 3) Invoca al agente decidor (siempre recibe un STRING)
+                payload = json.dumps({"data_json": data_json, "userQuery": request.question})
+                dec = await Runner.run(graph_decider_agent, payload)
+                choice: Dict[str, str] = dec.final_output
 
-            # 4) Generas la gráfica tú mismo
-            raw["imgb64"] = _generate_graphs_impl(
-                raw["returned_json"],
-                choice["chart_type"],
-                choice["x"],
-                choice["y"]
-            )
+                # 4) Generas la gráfica tú mismo
+                raw["imgb64"] = _generate_graphs_impl(
+                    raw["returned_json"],
+                    choice["chart_type"],
+                    choice["x"],
+                    choice["y"]
+                )
 
-        # 5) Devuelves raw; FastAPI serializa a JSON
-        return raw
+        except Exception as e:
+            print("no se pudo generar la imagen. ")
+            raw["imgb64"] = None
+
+        # 3. Formatear como Markdown
+        md = format_as_markdown(
+            title = raw["title"],
+            resp={"returned_json": raw["returned_json"]},
+            key_findings=raw["key_findings"],
+            methodology=raw["methodology"],
+            interpretation=raw["results_interpretation"],
+            recommendations = raw["recommendations"],
+            conclusion=raw["conclusion"],
+            imgb64=raw.get("imgb64")
+        )
+
+        # 4. Devolver solo el Markdown como JSON
+        return outputAsk2(markdown=md)
 
     except Exception as e:
         tb = traceback.format_exc()

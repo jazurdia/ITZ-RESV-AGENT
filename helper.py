@@ -1,5 +1,5 @@
 import json
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional
 
 def _generate_graphs_impl(
     data: List[Dict[str, Any]],
@@ -111,4 +111,53 @@ def _graph_all_in_one_impl(returned_json: str, userQuery: str) -> Dict[str, Any]
         "imgb64":        img
     }
 
+def format_as_markdown(
+    title: str,
+    resp: Dict[str, Any],
+    key_findings: str,
+    methodology: str,
+    interpretation: str,
+    recommendations: str,
+    conclusion: str,
+    imgb64: Optional[str] = None
+) -> str:
+    # 0) Título principal
+    md = f"# {title}\n\n"
+
+    # 1) Tabla dinámica para returned_json
+    rows = resp.get("returned_json", [])
+    if rows and isinstance(rows, list):
+        headers = list(rows[0].keys())
+        md += "## Datos\n\n"
+        md += "|" + "|".join(headers) + "|\n"
+        md += "|" + "|".join("---" for _ in headers) + "|\n"
+        for row in rows:
+            cells = ["" if row.get(h) is None else str(row[h]) for h in headers]
+            md += "|" + "|".join(cells) + "|\n"
+        md += "\n"
+    else:
+        md += "_No hay datos en returned_json_\n\n"
+
+    # 2) Secciones de texto
+    md += "## Hallazgos clave\n\n"
+    md += key_findings + "\n\n"
+
+    md += "## Metodología\n\n"
+    md += methodology + "\n\n"
+
+    md += "## Interpretación de resultados\n\n"
+    md += interpretation + "\n\n"
+
+    md += "## Recomendaciones\n\n"
+    md += recommendations + "\n\n"
+
+    md += "## Conclusión\n\n"
+    md += conclusion + "\n\n"
+
+    # 3) Imagen embebida (si existe)
+    if imgb64:
+        md += "## Gráfica\n\n"
+        md += f"![Gráfico](data:image/png;base64,{imgb64})\n"
+
+    return md
 

@@ -17,16 +17,20 @@ from typing_extensions import TypedDict
 class AnalysisOutput(TypedDict):
     """
     Esquema de salida estricto:
+    - title: titulo de la respuesta. 
     - returned_json: lista de objetos con los resultados de la consulta
     - key_findings: resumen de los hallazgos principales
     - methodology: descripción del proceso y filtros aplicados
     - results_interpretation: interpretación de lo que significan los datos
+    - recommendations: acciones recomendadas de acuerdo con la pregunta y los datos extraidos.
     - conclusion: conclusiones y próximos pasos
     """
+    title: str
     returned_json: List[Dict[str, Any]]
     key_findings: str
     methodology: str
     results_interpretation: str
+    recommendations: str
     conclusion: str
 
 @function_tool
@@ -60,24 +64,29 @@ Tu tarea es, a partir de la pregunta del usuario, **generar una consulta SQL (SQ
 
 Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to_sqlite` para obtener los datos en formato JSON. **Luego, debes entregar tu respuesta en un JSON con los siguientes campos**:
 
+- `title`: un nombre para la respuesta. 
 - `returned_json`: el resultado devuelto por la consulta (en JSON).
 - `methodology`: descripción del proceso, filtros o agregaciones aplicados sin mencionar nombres de columna. 
 - `results_interpretation`: interpretación de lo que significan los datos en el contexto de negocio. Debe ser extenso. 
 - `key_findings`: resumen de los hallazgos principales extraídos de `returned_json`.
+- `recommendations`: genera recomendaciones 
 - `conclusion`: conclusiones y próximos pasos sugeridos.
 
 Devuelve **solo** un objeto JSON válido con este esquema:
 
 {{
+  "title": "..."
   "returned_json": [...],
   "key_findings": "...",
   "methodology": "...",
   "results_interpretation": "...",
+  "recommendations": "..."
   "conclusion": "..."
 }}
 
 NOTAS:
 - Si la pregunta menciona wholesalers, debes usar el campo COMPANY_NAME.
+- No uses nunca los nombres de las columnas como respuestas, debes adaptar este nombre a un lenguaje conversacional. 
 
 """
 
