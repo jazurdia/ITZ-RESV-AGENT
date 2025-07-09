@@ -48,6 +48,7 @@ class OutputAsk(BaseModel):
     results_interpretation: str
     conclusion: str
     imgb64: Optional[str] = None
+    
 
 GRAPH_KEYWORDS = [
     "grafica", "gráfico", "gráfica",

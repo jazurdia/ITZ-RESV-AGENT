@@ -144,6 +144,7 @@ Debes invocar la herramienta decide_graph con esos dos parámetros
 y devolver únicamente su salida (el JSON con chart_type, x, y).
 """
 
+
 graph_decider_agent = Agent(
     name="GraphDeciderAgent",
     instructions=graph_decider_instructions,

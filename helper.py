@@ -32,6 +32,7 @@ def _generate_graphs_impl(
         plt.bar(df[x], df[y])
         plt.xlabel(x)
         plt.ylabel(y)
+        plt.xticks(rotation=45)
     elif ct == "line":
         # Asegurarse de que x sea datetime si corresponde
         try:
