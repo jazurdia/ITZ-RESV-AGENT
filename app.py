@@ -39,7 +39,7 @@ app = FastAPI(
     title="Itzana Agents API",
     description="API para ejecutar los agentes de análisis (currently 1)",
     version="1.0.0",
-    # lifespan=lifespan
+    lifespan=lifespan
 )
 
 class OutputAsk(BaseModel): # creo que ya no se usa. 
@@ -75,9 +75,12 @@ async def query_agent(request: QueryRequest):
                 data_json = json.dumps(raw["returned_json"])
                 # 3) Invoca al agente decidor (siempre recibe un STRING)
                 payload = json.dumps({"data_json": data_json, "userQuery": request.question})
+                print(f"[DEBUG] - Intentando Ejecutar el agente grafico")
                 dec = await Runner.run(graph_decider_agent, payload)
                 choice: Dict[str, str] = dec.final_output
+                print(f"[DEBUG] - El agente ha tomado la siguiente desicion: {json.dumps(choice, ensure_ascii=False)}")
 
+                print(f"[DEBUG] - Se inicia la herramienta de graficacion. ")
                 # 4) Generas la gráfica tú mismo
                 raw["imgb64"] = _generate_graphs_impl(
                     raw["returned_json"],
@@ -86,8 +89,13 @@ async def query_agent(request: QueryRequest):
                     choice["y"]
                 )
 
+                print(f"[DEBUG] - La herramienta ha terminado de generar la imagen. ")
+
         except Exception as e:
-            print("no se pudo generar la imagen. ")
+            print("[DEBUG] Problema al ejecutar el agente grafico")
+            tb = traceback.format_exc()
+            print(f"[DEBUG] - ERROR: {str(e)} TRACEBACK: {tb}")
+
             raw["imgb64"] = None
 
         # 3. Formatear como Markdown

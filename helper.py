@@ -1,6 +1,11 @@
 import json
 from typing import Any, List, Dict, Optional
 
+import pandas as pd
+import matplotlib.pyplot as plt
+import io
+import base64
+
 def _generate_graphs_impl(
     data: List[Dict[str, Any]],
     chart_type: str,
@@ -15,10 +20,9 @@ def _generate_graphs_impl(
     
     Devuelve un PNG codificado en Base64.
     """
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    import io
-    import base64
+
+    print(f"[DEBUG] - Iniciando herramienta de graficacion")
+    print(f"[DEBUG] - Los parametros recibidos son los siguientes: \n\tTipo: {chart_type} \n\tx: {x} \n\ty: {y}")
 
     # 1) Cargar los datos en un DataFrame
     df = pd.DataFrame(data)
@@ -48,6 +52,7 @@ def _generate_graphs_impl(
         plt.pie(df[y], labels=df[x], autopct="%1.1f%%")
     else:
         # Si el tipo no es soportado, devolvemos cadena vacía
+        print(f"[DEBUG] - El tipo de la herramienta no es soportado. ")
         return ""
 
     # 4) Título y ajustes
