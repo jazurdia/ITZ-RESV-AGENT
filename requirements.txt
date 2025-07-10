@@ -6,3 +6,5 @@ openai>=1.87.0
 openai-agents==0.0.19
 python-dotenv>=1.0.1
 typing_extensions>=4.12.2
+matplotlib>=3.8.4
+base64io
