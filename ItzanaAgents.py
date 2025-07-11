@@ -87,13 +87,14 @@ Devuelve **solo** un objeto JSON válido con este esquema:
 NOTAS:
 - Si la pregunta menciona wholesalers, debes usar el campo COMPANY_NAME.
 - No uses nunca los nombres de las columnas como respuestas, debes adaptar este nombre a un lenguaje conversacional. 
+- Responde en el lenguaje de la pregunta. 
 
 """
 
 reservations_agent = Agent(
     name="ReservationsAgent",
     instructions=reservations_instructions,
-    model="gpt-4.1",
+    model="gpt-4o",
     tools=[execute_query_to_sqlite],
     output_type=AgentOutputSchema(AnalysisOutput, strict_json_schema=False)
 
@@ -157,7 +158,7 @@ y devolver únicamente su salida (el JSON con chart_type, x, y).
 graph_decider_agent = Agent(
     name="GraphDeciderAgent",
     instructions=graph_decider_instructions,
-    model="gpt-4.1",
+    model="gpt-4o",
     tools=[decide_graph],
     output_type=AgentOutputSchema(GraphChoice, strict_json_schema=False)
 )

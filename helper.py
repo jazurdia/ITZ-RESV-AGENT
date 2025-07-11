@@ -1,10 +1,16 @@
+from datetime import datetime
 import json
+import random
+import string
 from typing import Any, List, Dict, Optional
 
+import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 import io
 import base64
+import json
+
 
 def _generate_graphs_impl(
     data: List[Dict[str, Any]],
@@ -26,6 +32,9 @@ def _generate_graphs_impl(
 
     # 1) Cargar los datos en un DataFrame
     df = pd.DataFrame(data)
+
+    # Filtrar filas con valores nulos en x o y
+    df = df[df[x].notnull() & df[y].notnull()]
 
     # 2) Preparar figura
     plt.figure(figsize=(10, 6))
@@ -59,16 +68,32 @@ def _generate_graphs_impl(
     plt.title(f"{ct.capitalize()} Chart: {y} by {x}")
     plt.tight_layout()
 
-    # 5) Guardar en buffer y codificar a base64
     buf = io.BytesIO()
     plt.savefig(buf, format="png")
     buf.seek(0)
-    img_b64 = base64.b64encode(buf.read()).decode("utf-8")
     plt.close()
 
-    return img_b64
+    # 5) Generar nombre único: YYYYMMDD-HHMMSS-XYZ.png
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    rand_suffix = "".join(random.choices(string.ascii_letters + string.digits, k=3))
+    filename = f"{timestamp}-{rand_suffix}.png"
 
-import json
+    # 6) Subir la imagen
+    resp = requests.post(
+        "https://agents.garooinc.com/upload",
+        files={"file": (filename, buf, "image/png")}
+    )
+    resp.raise_for_status()
+    result = resp.json()
+
+    # Verifica que el servidor confirme la subida y devuelva la URL
+    if resp.status_code == 200 and result.get("success", True):
+        url_img = "https://agents.garooinc.com/files/" + filename
+        return url_img
+    else:
+        print(f"[DEBUG] - Falló la subida de la imagen: {result}")
+        return ""
+
 
 
 
@@ -107,13 +132,11 @@ def _graph_all_in_one_impl(returned_json: str, userQuery: str) -> Dict[str, Any]
             break
 
     # 4) Generar la imagen
-    img = _generate_graphs_impl(table, ct, x, y)
+    url_img = _generate_graphs_impl(table, ct, x, y)
 
     # 5) Devolver solo los campos necesarios
     return {
-        "returned_json": table,
-        "userQuery":     userQuery,
-        "imgb64":        img
+        "url_img":        url_img
     }
 
 def format_as_markdown(
@@ -124,7 +147,7 @@ def format_as_markdown(
     interpretation: str,
     recommendations: str,
     conclusion: str,
-    imgb64: Optional[str] = None
+    url_img: Optional[str] = None
 ) -> str:
     # 0) Título principal
     md = f"# {title}\n\n"
@@ -160,9 +183,9 @@ def format_as_markdown(
     md += conclusion + "\n\n"
 
     # 3) Imagen embebida (si existe)
-    if imgb64:
+    if url_img:
         md += "## Gráfica\n\n"
-        md += f"![Gráfico](data:image/png;base64,{imgb64})\n"
+        md += f"![Gráfico]({url_img})\n"
 
     return md
 

@@ -22,6 +22,7 @@ from helper import format_as_markdown
 import traceback
 
 
+
 load_dotenv()
 
 class QueryRequest(BaseModel):
@@ -39,7 +40,7 @@ app = FastAPI(
     title="Itzana Agents API",
     description="API para ejecutar los agentes de análisis (currently 1)",
     version="1.0.0",
-    lifespan=lifespan
+    # lifespan=lifespan
 )
 
 class OutputAsk(BaseModel): # creo que ya no se usa. 
@@ -50,7 +51,7 @@ class OutputAsk(BaseModel): # creo que ya no se usa.
     results_interpretation: str
     recommendations: str
     conclusion: str
-    imgb64: Optional[str] = None
+    url_img: Optional[str] = None
 
 class outputAsk2(BaseModel):
     markdown : str
@@ -65,10 +66,13 @@ GRAPH_KEYWORDS = [
 @app.post("/ask", response_model=outputAsk2)
 async def query_agent(request: QueryRequest):
     try:
+        print(f"[DEBUG] - Pregunta recibida: {request.question}")
+
+        print(f"[DEBUG] - Iniciando el agente de reservaciones")
         # 1) Llamas al agente SQL
         resp = await Runner.run(reservations_agent, request.question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
-
+        print(f"[DEBUG] - Respuesta del agente de reservaciones: {json.dumps(raw, ensure_ascii=False)}")
         try: 
             # 2) Si pide gráfico, decides parámetros
             if any(k in request.question.lower() for k in GRAPH_KEYWORDS):
@@ -82,7 +86,7 @@ async def query_agent(request: QueryRequest):
 
                 print(f"[DEBUG] - Se inicia la herramienta de graficacion. ")
                 # 4) Generas la gráfica tú mismo
-                raw["imgb64"] = _generate_graphs_impl(
+                raw["url_img"] = _generate_graphs_impl(
                     raw["returned_json"],
                     choice["chart_type"],
                     choice["x"],
@@ -96,7 +100,8 @@ async def query_agent(request: QueryRequest):
             tb = traceback.format_exc()
             print(f"[DEBUG] - ERROR: {str(e)} TRACEBACK: {tb}")
 
-            raw["imgb64"] = None
+        print(f"[DEBUG] - Preparando la respuesta final")
+
 
         # 3. Formatear como Markdown
         md = format_as_markdown(
@@ -107,7 +112,7 @@ async def query_agent(request: QueryRequest):
             interpretation=raw["results_interpretation"],
             recommendations = raw["recommendations"],
             conclusion=raw["conclusion"],
-            imgb64=raw.get("imgb64")
+            url_img = raw["url_img"] if "url_img" in raw else None
         )
 
         # 4. Devolver solo el Markdown como JSON
