@@ -149,10 +149,8 @@ def format_as_markdown(
     conclusion: str,
     url_img: Optional[str] = None
 ) -> str:
-    # 0) Título principal
     md = f"# {title}\n\n"
 
-    # 1) Tabla dinámica para returned_json
     rows = resp.get("returned_json", [])
     if rows and isinstance(rows, list):
         headers = list(rows[0].keys())
@@ -160,13 +158,21 @@ def format_as_markdown(
         md += "|" + "|".join(headers) + "|\n"
         md += "|" + "|".join("---" for _ in headers) + "|\n"
         for row in rows:
-            cells = ["" if row.get(h) is None else str(row[h]) for h in headers]
+            cells = []
+            for h in headers:
+                val = row.get(h)
+                if val is None:
+                    cells.append("")
+                elif isinstance(val, (int, float)):
+                    # Formato correcto: coma miles, punto decimal
+                    cells.append(f"{val:,.2f}")
+                else:
+                    cells.append(str(val))
             md += "|" + "|".join(cells) + "|\n"
         md += "\n"
     else:
         md += "_No hay datos en returned_json_\n\n"
 
-    # 2) Secciones de texto
     md += "## Hallazgos clave\n\n"
     md += key_findings + "\n\n"
 
@@ -182,7 +188,6 @@ def format_as_markdown(
     md += "## Conclusión\n\n"
     md += conclusion + "\n\n"
 
-    # 3) Imagen embebida (si existe)
     if url_img:
         md += "## Gráfica\n\n"
         md += f"![Gráfico]({url_img})\n"
