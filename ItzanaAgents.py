@@ -10,6 +10,8 @@ from helper import _graph_all_in_one_impl, graph_tool_schema
 
 from typing_extensions import TypedDict
 
+from contexto import string_contexto
+
 # ----------------------------------
 #         Analysis Agent 
 # ----------------------------------
@@ -62,6 +64,10 @@ El esquema de la tabla `reservations` es el siguiente: {reservations_schema()}.
 
 Tu tarea es, a partir de la pregunta del usuario, **generar una consulta SQL (SQLite)** sobre la tabla `reservations` que permita responder a la pregunta. Debes razonar qué datos solicitar.
 
+Al generar tu respuesta, debes tener en cuenta la siguiente informacion general sobre la empresa: {string_contexto}. Esta informacion es crucial para todas las respuestas que generes y siempre debes tomarla en cuenta. 
+Debes entender el contexto de la empresa y sus operaciones para generar respuestas relevantes y útiles.
+Debes hacer que los resultados de la consulta sql funionen con el contexto de la empresa y su operativa.
+
 Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to_sqlite` para obtener los datos en formato JSON. **Luego, debes entregar tu respuesta en un JSON con los siguientes campos**:
 
 - `title`: un nombre para la respuesta. 
@@ -69,7 +75,7 @@ Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to
 - `methodology`: descripción del proceso, filtros o agregaciones aplicados sin mencionar nombres de columna. 
 - `results_interpretation`: interpretación de lo que significan los datos en el contexto de negocio. Debe ser extenso. 
 - `key_findings`: resumen de los hallazgos principales extraídos de `returned_json`.
-- `recommendations`: genera recomendaciones 
+- `recommendations`: genera recomendaciones de acuerdo a la pregunta y los datos extraidos. Toma en cuenta la inforamcion de la empresa siempre para generar este campo de la respuesta. 
 - `conclusion`: conclusiones y próximos pasos sugeridos.
 
 Devuelve **solo** un objeto JSON válido con este esquema:
