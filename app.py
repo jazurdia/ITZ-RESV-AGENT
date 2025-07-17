@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from ItzanaAgents import reservations_agent, graph_decider_agent
+from ItzanaAgents import reservations_agent
 from load_xlsx_to_sqlite import (
     load_reservations_to_sqlite,
     load_grouped_accounts_to_sqlite,
@@ -43,15 +43,15 @@ app = FastAPI(
     # lifespan=lifespan
 )
 
-class OutputAsk(BaseModel): # creo que ya no se usa. 
-    title: str
+class outputAsk(BaseModel): # creo que ya no se usa. 
+    #title: str
     returned_json: List[Dict[str, Any]]
-    key_findings: str
+    findings: str
     methodology: str
-    results_interpretation: str
-    recommendations: str
-    conclusion: str
-    url_img: Optional[str] = None
+    #results_interpretation: str
+    #recommendations: str
+    #conclusion: str
+    #url_img: Optional[str] = None
 
 class outputAsk2(BaseModel):
     markdown : str
@@ -63,7 +63,7 @@ GRAPH_KEYWORDS = [
     "diagrama", "imagen", "representa"
 ]
 
-@app.post("/ask", response_model=outputAsk2)
+@app.post("/ask", response_model=outputAsk)
 async def query_agent(request: QueryRequest):
     try:
         print(f"[DEBUG] - Pregunta recibida: {request.question}")
@@ -73,50 +73,13 @@ async def query_agent(request: QueryRequest):
         resp = await Runner.run(reservations_agent, request.question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
         print(f"[DEBUG] - Respuesta del agente de reservaciones: {json.dumps(raw, ensure_ascii=False)}")
-        try: 
-            # 2) Si pide gráfico, decides parámetros
-            if any(k in request.question.lower() for k in GRAPH_KEYWORDS):
-                data_json = json.dumps(raw["returned_json"])
-                # 3) Invoca al agente decidor (siempre recibe un STRING)
-                payload = json.dumps({"data_json": data_json, "userQuery": request.question})
-                print(f"[DEBUG] - Intentando Ejecutar el agente grafico")
-                dec = await Runner.run(graph_decider_agent, payload)
-                choice: Dict[str, str] = dec.final_output
-                print(f"[DEBUG] - El agente ha tomado la siguiente desicion: {json.dumps(choice, ensure_ascii=False)}")
 
-                print(f"[DEBUG] - Se inicia la herramienta de graficacion. ")
-                # 4) Generas la gráfica tú mismo
-                raw["url_img"] = _generate_graphs_impl(
-                    raw["returned_json"],
-                    choice["chart_type"],
-                    choice["x"],
-                    choice["y"]
-                )
-
-                print(f"[DEBUG] - La herramienta ha terminado de generar la imagen. ")
-
-        except Exception as e:
-            print("[DEBUG] Problema al ejecutar el agente grafico")
-            tb = traceback.format_exc()
-            print(f"[DEBUG] - ERROR: {str(e)} TRACEBACK: {tb}")
-
-        print(f"[DEBUG] - Preparando la respuesta final")
-
-
-        # 3. Formatear como Markdown
-        md = format_as_markdown(
-            title = raw["title"],
-            resp={"returned_json": raw["returned_json"]},
-            key_findings=raw["key_findings"],
-            methodology=raw["methodology"],
-            interpretation=raw["results_interpretation"],
-            recommendations = raw["recommendations"],
-            conclusion=raw["conclusion"],
-            url_img = raw["url_img"] if "url_img" in raw else None
-        )
-
-        # 4. Devolver solo el Markdown como JSON
-        return outputAsk2(markdown=md)
+        return {
+            "returned_json": raw.get("returned_json", []),
+            "findings": raw.get("findings", ""),
+            "methodology": raw.get("methodology", "")
+        }
+        
 
     except Exception as e:
         tb = traceback.format_exc()
