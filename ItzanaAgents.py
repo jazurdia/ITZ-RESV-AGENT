@@ -1,9 +1,11 @@
 import json
 import sqlite3
-from typing import Any, List, Dict
+from typing import Any, List, Dict, TypedDict
 from pydantic import BaseModel
 from agents import Agent, function_tool, AgentOutputSchema
 from agents.tool import FunctionTool
+from agents.tool import CodeInterpreterTool
+
 from load_xlsx_to_sqlite import reservations_schema, groupedaccounts_schema
 
 from helper import _graph_all_in_one_impl, graph_tool_schema
@@ -98,4 +100,12 @@ reservations_agent = Agent(
     output_type=AgentOutputSchema(AnalysisOutput, strict_json_schema=False)
 
 )
+
+# ----------------------------------
+#       Graph Generator Agent
+# ----------------------------------
+
+# So far... this is what I have. https://chatgpt.com/share/6879f4c5-38e8-8007-9584-437fe067a02d
+
+
 
