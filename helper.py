@@ -95,8 +95,6 @@ def _generate_graphs_impl(
         return ""
 
 
-
-
 # JSON-Schema que solo acepta strings para evitar validación de objetos anidados
 graph_tool_schema = {
     "type": "object",

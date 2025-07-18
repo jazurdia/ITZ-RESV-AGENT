@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from httpcore import request
 from pydantic import BaseModel
 from ItzanaAgents import reservations_agent
 from load_xlsx_to_sqlite import (
@@ -21,9 +22,19 @@ from helper import format_as_markdown
 
 import traceback
 
+import logging
+from openai import OpenAI
 
+from chat_module import chat_betterQuestions, chat_better_answers
 
-load_dotenv()
+from config import OPENAI_API_KEY
+
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
 class QueryRequest(BaseModel):
     question: str
@@ -44,7 +55,7 @@ app = FastAPI(
 )
 
 class outputAsk(BaseModel): # creo que ya no se usa. 
-    #title: str
+    title: str
     returned_json: List[Dict[str, Any]]
     findings: str
     methodology: str
@@ -52,6 +63,7 @@ class outputAsk(BaseModel): # creo que ya no se usa.
     #recommendations: str
     #conclusion: str
     #url_img: Optional[str] = None
+    better_answers: str
 
 class outputAsk2(BaseModel):
     markdown : str
@@ -63,22 +75,27 @@ GRAPH_KEYWORDS = [
     "diagrama", "imagen", "representa"
 ]
 
-@app.post("/ask", response_model=outputAsk)
+@app.post("/ask", response_model=outputAsk2)
 async def query_agent(request: QueryRequest):
     try:
+
         print(f"[DEBUG] - Pregunta recibida: {request.question}")
+
+        better_question = await chat_betterQuestions(request.question)
+        
+        print(f"[DEBUG] - Pregunta mejorada: {better_question}")
 
         print(f"[DEBUG] - Iniciando el agente de reservaciones")
         # 1) Llamas al agente SQL
-        resp = await Runner.run(reservations_agent, request.question)
+        resp = await Runner.run(reservations_agent, better_question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
         print(f"[DEBUG] - Respuesta del agente de reservaciones: {json.dumps(raw, ensure_ascii=False)}")
 
-        return {
-            "returned_json": raw.get("returned_json", []),
-            "findings": raw.get("findings", ""),
-            "methodology": raw.get("methodology", "")
-        }
+        betterAnswers = await chat_better_answers(raw)
+
+        print(f"[DEBUG] - Respuesta mejorada: {betterAnswers}")
+
+        return {"markdown" : betterAnswers}
         
 
     except Exception as e:

@@ -36,6 +36,9 @@ class AnalysisOutput(TypedDict):
 def execute_query_to_sqlite(query: str) -> Any:
     """Ejecuta la consulta SQL en Itzana.db y retorna resultados."""
     conn = None
+
+    print(f"[DEBUG] - Consulta SQL generada por el agente:\n{query}")  # <-- Agrega este print
+
     try:
         conn = sqlite3.connect("Itzana.db")
         cursor = conn.cursor()
@@ -63,6 +66,7 @@ Tu tarea es, a partir de la pregunta del usuario, **generar una consulta SQL (SQ
 
 Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to_sqlite` para obtener los datos en formato JSON. **Luego, debes entregar tu respuesta en un JSON con los siguientes campos**:
 
+- `title`: un título descriptivo de la respuesta.
 - `returned_json`: el resultado devuelto por la consulta (en JSON).
 - `findings`: explicacion de los datos encontrados.
 - `methodology`: descripción de cómo se generó la consulta y qué filtros se aplicaron.
@@ -70,6 +74,7 @@ Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to
 Devuelve **solo** un objeto JSON válido con este esquema:
 
 {{
+  "title": "Título descriptivo de la respuesta",
   "returned_json": [...],
   "findings": "...",
   "methodology": "..."
@@ -80,6 +85,8 @@ NOTAS:
 - No uses nunca los nombres de las columnas como respuestas, debes adaptar este nombre a un lenguaje conversacional. 
 - Responde en el lenguaje de la pregunta. 
 - las unidades monetarias son en USD.
+- toda la informacion de la tabla `reservations` es del resort Itzana. Por lo que no vale la pena incluirlo al hacer consultas. 
+- en otras palabras, no uses WHERE RESORT = 'Itz''ana'. 
 
 """
 
