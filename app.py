@@ -27,7 +27,7 @@ from openai import OpenAI
 
 from chat_module import chat_betterQuestions, chat_better_answers
 
-from config import OPENAI_API_KEY
+from aux_scripts.config import OPENAI_API_KEY
 
 def setup_logging():
     logging.basicConfig(
@@ -85,15 +85,15 @@ async def query_agent(request: QueryRequest):
         
         print(f"[DEBUG] - Pregunta mejorada: {better_question}")
 
-        print(f"[DEBUG] - Iniciando el agente de reservaciones")
+        print(f"[INFO] - Iniciando el agente de reservaciones")
         # 1) Llamas al agente SQL
         resp = await Runner.run(reservations_agent, better_question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
-        print(f"[DEBUG] - Respuesta del agente de reservaciones: {json.dumps(raw, ensure_ascii=False)}")
+        print(f"[DEBUG] - Respuesta del agente de reservaciones: \n------------------------\n{json.dumps(raw, ensure_ascii=False)} \n------------------------\n")
 
         betterAnswers = await chat_better_answers(raw)
 
-        print(f"[DEBUG] - Respuesta mejorada: {betterAnswers}")
+        print(f"\n[DEBUG] - Respuesta mejorada: \n------------------------\n\n{betterAnswers}")
 
         return {"markdown" : betterAnswers}
         

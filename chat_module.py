@@ -5,7 +5,7 @@ import asyncio
 from openai import OpenAI
 from load_xlsx_to_sqlite import reservations_schema
 
-from contexto import string_contexto
+from aux_scripts.contexto import string_contexto
 
 # Instancia del cliente OpenAI (versión >=1.0.0)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -65,9 +65,9 @@ async def chat_better_answers(agent_response: dict) -> str:
         "2. **Análisis libre**: Explica con tus palabras lo más relevante de los datos, "
         "puedes incluir tendencias, anomalías, contexto, oportunidades, riesgos, etc. "
         "No sigas un formato rígido, adapta el análisis a lo que veas en los datos.\n"
-        "3. **Tabla de datos**: Incluye la tabla completa tal como la devolvió el agente.\n"
+        "3. **Tabla de datos**: Incluye la tabla completa tal como la devolvió el agente si es relevante. Si no, omite esta sección.\n"
         "4. **Recomendaciones**: Propón acciones concretas y prácticas basadas en los datos, "
-        "adaptadas al día a día del resort. Que sean claras, realistas y directamente aplicables.\n"
+        "adaptadas al día a día del resort. Que sean claras, realistas y directamente aplicables. Solo haz esto si la data es suficiente para que sea útil. Si no, omite esta sección. \n"
         "5. **Cierre**: Termina con un recordatorio de que solo se usó la información proporcionada y mantén siempre el tono cercano.\n\n"
         "No inventes nada: usa únicamente la información proporcionada."
     )

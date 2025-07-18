@@ -10,7 +10,7 @@ from helper import _graph_all_in_one_impl, graph_tool_schema
 
 from typing_extensions import TypedDict
 
-from contexto import string_contexto
+from aux_scripts.contexto import string_contexto
 
 # ----------------------------------
 #         Analysis Agent 
