@@ -3,7 +3,7 @@
 import os
 import asyncio
 from openai import OpenAI
-from load_xlsx_to_sqlite import reservations_schema
+from data_processing.load_xlsx_to_sqlite import reservations_schema
 
 from aux_scripts.contexto import string_contexto
 

@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from httpcore import request
 from pydantic import BaseModel
 from ItzanaAgents import reservations_agent
-from load_xlsx_to_sqlite import (
+from data_processing.load_xlsx_to_sqlite import (
     load_reservations_to_sqlite,
     load_grouped_accounts_to_sqlite,
     delete_itzana_db

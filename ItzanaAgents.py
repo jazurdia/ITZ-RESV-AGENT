@@ -6,7 +6,7 @@ from agents import Agent, function_tool, AgentOutputSchema
 from agents.tool import FunctionTool
 from agents.tool import CodeInterpreterTool
 
-from load_xlsx_to_sqlite import reservations_schema, groupedaccounts_schema
+from data_processing.load_xlsx_to_sqlite import reservations_schema, groupedaccounts_schema
 
 from helper import _graph_all_in_one_impl, graph_tool_schema
 
