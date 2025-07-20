@@ -6,7 +6,7 @@ from agents import Agent, function_tool, AgentOutputSchema
 from agents.tool import FunctionTool
 from agents.tool import CodeInterpreterTool
 
-from data_processing.load_xlsx_to_sqlite import reservations_schema, groupedaccounts_schema
+from data_processing.load_xlsx_to_sqlite import reservations_schema
 
 from helper import _graph_all_in_one_impl, graph_tool_schema
 
@@ -42,7 +42,7 @@ def execute_query_to_sqlite(query: str) -> Any:
     print(f"[DEBUG] - Consulta SQL generada por el agente:\n{query}")  # <-- Agrega este print
 
     try:
-        conn = sqlite3.connect("Itzana.db")
+        conn = sqlite3.connect("resv.db")
         cursor = conn.cursor()
         cursor.execute(query)
         if query.strip().lower().startswith("select"):
@@ -61,7 +61,7 @@ def execute_query_to_sqlite(query: str) -> Any:
 
 # Instrucciones para el agente de reservaciones
 reservations_instructions = f"""
-Eres un analista de datos con acceso a una base SQLite llamada `Itzana.db`. La tabla principal es `reservations`.
+Eres un analista de datos con acceso a una base SQLite llamada `resv.db`. La tabla principal es `reservations`.
 El esquema de la tabla `reservations` es el siguiente: {reservations_schema()}.
 
 Tu tarea es, a partir de la pregunta del usuario, **generar una consulta SQL (SQLite)** sobre la tabla `reservations` que permita responder a la pregunta. Debes razonar qué datos solicitar.

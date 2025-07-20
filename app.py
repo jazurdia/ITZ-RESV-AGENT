@@ -2,11 +2,6 @@ from fastapi import FastAPI, HTTPException
 from httpcore import request
 from pydantic import BaseModel
 from ItzanaAgents import reservations_agent
-from data_processing.load_xlsx_to_sqlite import (
-    load_reservations_to_sqlite,
-    load_grouped_accounts_to_sqlite,
-    delete_itzana_db
-)
 from agents import Runner
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -29,6 +24,8 @@ from chat_module import chat_betterQuestions, chat_better_answers
 
 from aux_scripts.config import OPENAI_API_KEY
 
+load_dotenv()  # Carga las variables de entorno desde .env
+
 def setup_logging():
     logging.basicConfig(
         level=logging.INFO,
@@ -39,19 +36,11 @@ def setup_logging():
 class QueryRequest(BaseModel):
     question: str
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Limpiar y cargar la base de datos al iniciar la API
-    delete_itzana_db()
-    load_reservations_to_sqlite("data/reservations.xlsx")
-    load_grouped_accounts_to_sqlite("data/grouped_accounts.xlsx")
-    yield
 
 app = FastAPI(
     title="Itzana Agents API",
     description="API para ejecutar los agentes de análisis (currently 1)",
     version="1.0.0",
-    # lifespan=lifespan
 )
 
 class outputAsk(BaseModel): # creo que ya no se usa. 
@@ -106,12 +95,6 @@ async def query_agent(request: QueryRequest):
         )
 
 
-@app.post("/reload", summary="Recarga la base de datos desde los archivos XLSX")
-async def reload_db():
-    delete_itzana_db()
-    reservas = load_reservations_to_sqlite("data/reservations.xlsx")
-    cuentas = load_grouped_accounts_to_sqlite("data/grouped_accounts.xlsx")
-    return {"reservations_loaded": reservas, "accounts_loaded": cuentas}
 
 if __name__ == "__main__":
     # Ejecutar con: python app.py o uvicorn app:app --reload --host 0.0.0.0 --port 8000

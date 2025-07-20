@@ -6,9 +6,10 @@ from openai import OpenAI
 from data_processing.load_xlsx_to_sqlite import reservations_schema
 
 from aux_scripts.contexto import string_contexto
+from aux_scripts.config import OPENAI_API_KEY
 
 # Instancia del cliente OpenAI (versión >=1.0.0)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 async def chat_betterQuestions(userQuery: str) -> str:
     """
