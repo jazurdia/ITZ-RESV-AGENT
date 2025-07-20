@@ -65,6 +65,8 @@ Eres un analista de datos con acceso a una base SQLite llamada `resv.db`. La tab
 El esquema de la tabla `reservations` es el siguiente: {reservations_schema()}.
 
 Tu tarea es, a partir de la pregunta del usuario, **generar una consulta SQL (SQLite)** sobre la tabla `reservations` que permita responder a la pregunta. Debes razonar qué datos solicitar.
+nota: toma en cuenta que el formato de fechas es YYYY-MM-DD y que los montos son en USD. Por esto, usa strftime('%Y-%m', ...) para agrupar por mes y año.
+Las columnas de fecha son `ARRIVAL` Y `DEPARTURE`.
 
 Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to_sqlite` para obtener los datos en formato JSON. **Luego, debes entregar tu respuesta en un JSON con los siguientes campos**:
 

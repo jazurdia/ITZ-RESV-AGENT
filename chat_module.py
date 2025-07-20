@@ -5,7 +5,7 @@ import asyncio
 from openai import OpenAI
 from data_processing.load_xlsx_to_sqlite import reservations_schema
 
-from aux_scripts.contexto import string_contexto
+from aux_scripts.contexto import string_contexto, string_wholesalers
 from aux_scripts.config import OPENAI_API_KEY
 
 # Instancia del cliente OpenAI (versión >=1.0.0)
@@ -17,18 +17,22 @@ async def chat_betterQuestions(userQuery: str) -> str:
     más clara y específica al ejecutarse contra la base de datos.
     """
     contexto = (
-        "Eres un asistente experto en análisis de datos para el resort Itz'ana. "
-        "Tu tarea es mejorar la pregunta del usuario para que sea clara, precisa y fácil de responder "
-        "por un agente de datos. SOLO puedes usar la información disponible en la tabla 'reservations', cuyo esquema es: "
-        f"{reservations_schema()}. "
-        "No agregues detalles ni pidas información que no esté en este esquema. "
-        "No pidas análisis avanzados, solo consultas directas, filtros y agrupaciones posibles con los campos disponibles. "
-        "Incluye detalles relevantes en la pregunta mejorada, como canal, compañía, montos, fechas, tipo de habitación, y cualquier filtro útil, "
-        "pero solo si existen en el esquema. "
-        "Si la pregunta menciona 'wholesaler' o 'wholesalers', debes usar el campo COMPANY_NAME. "
-        "No inventes datos ni relaciones. "
-        "Mejora la redacción y especificidad de la consulta original, pero limita la pregunta a lo que realmente puede responderse con los datos y campos existentes."
-    )
+    "Eres un asistente experto en análisis de datos para el resort Itz'ana. "
+    "Tu tarea es mejorar la pregunta del usuario para que sea clara, precisa y fácil de responder "
+    "por un agente de datos. SOLO puedes usar la información disponible en la tabla 'reservations', cuyo esquema es: "
+    f"{reservations_schema()}. "
+    f"Toma en cuenta también nuestros mayoristas o retailers, que son: {string_wholesalers}. "
+    "Si el usuario menciona un mayorista, aunque sea con errores de ortografía o palabras parecidas, "
+    "debes corregir el nombre y usar el campo COMPANY_NAME para filtrar la consulta. "
+    "Siempre corrige automáticamente cualquier nombre de mayorista que se parezca a los de la lista. "
+    "Si la pregunta menciona 'wholesaler' o 'wholesalers', debes usar el campo COMPANY_NAME. "
+    "No agregues detalles ni pidas información que no esté en este esquema. "
+    "No pidas análisis avanzados, solo consultas directas, filtros y agrupaciones posibles con los campos disponibles. "
+    "Incluye detalles relevantes en la pregunta mejorada, como canal, compañía, montos, fechas, tipo de habitación, y cualquier filtro útil, "
+    "pero solo si existen en el esquema. "
+    "No inventes datos ni relaciones. "
+    "Mejora la redacción y especificidad de la consulta original, pero limita la pregunta a lo que realmente puede responderse con los datos y campos existentes."
+)
 
     try:
         # Ejecutamos la llamada síncrona en un hilo para no bloquear el event loop
@@ -66,7 +70,7 @@ async def chat_better_answers(agent_response: dict) -> str:
         "2. **Análisis libre**: Explica con tus palabras lo más relevante de los datos, "
         "puedes incluir tendencias, anomalías, contexto, oportunidades, riesgos, etc. "
         "No sigas un formato rígido, adapta el análisis a lo que veas en los datos.\n"
-        "3. **Tabla de datos**: Incluye la tabla completa tal como la devolvió el agente si es relevante. Si no, omite esta sección.\n"
+        "3. **Tabla de datos**: Incluye la tabla completa, con todos los datos presentes en returned_json. Si los datos no son relevantes, omite esta sección. Si lo son, muestra TODA la tabla. \n"
         "4. **Recomendaciones**: Propón acciones concretas y prácticas basadas en los datos, "
         "adaptadas al día a día del resort. Que sean claras, realistas y directamente aplicables. Solo haz esto si la data es suficiente para que sea útil. Si no, omite esta sección. \n"
         "5. **Cierre**: Termina con un recordatorio de que solo se usó la información proporcionada y mantén siempre el tono cercano.\n\n"
