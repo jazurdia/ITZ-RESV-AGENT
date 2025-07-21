@@ -1,15 +1,16 @@
-# chat_module.py
-
-import os
 import asyncio
 from openai import OpenAI
-from data_processing.load_xlsx_to_sqlite import reservations_schema
 
-from aux_scripts.contexto import string_contexto, string_wholesalers
 from aux_scripts.config import OPENAI_API_KEY
+
+from helper import load_context
 
 # Instancia del cliente OpenAI (versión >=1.0.0)
 client = OpenAI(api_key=OPENAI_API_KEY)
+
+resv_columns = load_context("knowledge/reservations_columns.md")
+wholesalers_list = load_context("knowledge/wholesalers.txt")
+itzana_knowledge = load_context("knowledge/itzana_context.md")
 
 async def chat_betterQuestions(userQuery: str) -> str:
     """
@@ -17,22 +18,21 @@ async def chat_betterQuestions(userQuery: str) -> str:
     más clara y específica al ejecutarse contra la base de datos.
     """
     contexto = (
-    "Eres un asistente experto en análisis de datos para el resort Itz'ana. "
-    "Tu tarea es mejorar la pregunta del usuario para que sea clara, precisa y fácil de responder "
-    "por un agente de datos. SOLO puedes usar la información disponible en la tabla 'reservations', cuyo esquema es: "
-    f"{reservations_schema()}. "
-    f"Toma en cuenta también nuestros mayoristas o retailers, que son: {string_wholesalers}. "
-    "Si el usuario menciona un mayorista, aunque sea con errores de ortografía o palabras parecidas, "
-    "debes corregir el nombre y usar el campo COMPANY_NAME para filtrar la consulta. "
-    "Siempre corrige automáticamente cualquier nombre de mayorista que se parezca a los de la lista. "
-    "Si la pregunta menciona 'wholesaler' o 'wholesalers', debes usar el campo COMPANY_NAME. "
-    "No agregues detalles ni pidas información que no esté en este esquema. "
-    "No pidas análisis avanzados, solo consultas directas, filtros y agrupaciones posibles con los campos disponibles. "
-    "Incluye detalles relevantes en la pregunta mejorada, como canal, compañía, montos, fechas, tipo de habitación, y cualquier filtro útil, "
-    "pero solo si existen en el esquema. "
-    "No inventes datos ni relaciones. "
-    "Mejora la redacción y especificidad de la consulta original, pero limita la pregunta a lo que realmente puede responderse con los datos y campos existentes."
-)
+        "Eres un asistente experto en análisis de datos para el resort Itz'ana. "
+        "Tu tarea es transformar la pregunta del usuario en una instrucción técnica, concisa y precisa, describiendo EXACTAMENTE la consulta a realizar, usando los nombres exactos de las columnas de la tabla 'reservations'. "
+        "Corrige cualquier error ortográfico en los nombres de mayoristas (wholesalers) usando la lista de mayoristas conocidos. "
+        "Si el usuario menciona un mayorista de forma incorrecta o con errores, corrígelo y usa el nombre correcto. "
+        "No generes el query SQL. "
+        "No seas conversacional, solo describe con precisión qué columnas se deben usar para agrupar, filtrar, sumar, contar, etc. No contestes preguntas. "
+        "IMPORTANTE: Si parte de la pregunta del usuario solicita recomendaciones o preguntas abiertas que no se pueden responder con datos, debes devolver esa parte ademas de lo referente a la consulta sql. "
+        "No repitas la pregunta original. "
+        "Ejemplo: 'Obtener el total de EFFECTIVE_RATE_AMOUNT agrupado por ROOM_CATEGORY_LABEL, filtrando por COMPANY_NAME igual a \"EXPEDIA, INC.\".' "
+        f"Columnas de la tabla: {resv_columns} "
+        f"Lista de mayoristas: {wholesalers_list} "
+        "Si la pregunta menciona una grafica y no menciona el tipo de grafica, asume que es una barra."
+        "Si la pregunta menciona una grafica y menciona el tipo de grafica, usa ese tipo. pero intenta mejorar la descripcion de la grafica."
+    )
+
 
     try:
         # Ejecutamos la llamada síncrona en un hilo para no bloquear el event loop
@@ -63,7 +63,7 @@ async def chat_better_answers(agent_response: dict) -> str:
     prompt = (
         "Eres un compañero experto en análisis de datos para el resort Itz'ana en Placencia, Belice, "
         "con un estilo conversacional, como si estuviéramos charlando sobre los números.\n\n"
-        f"Contexto del negocio:\n{string_contexto}\n\n"
+        f"Contexto del negocio:\n{itzana_knowledge}\n\n"
         f"Lo que devolvió el agente:\n{agent_response}\n\n"
         "Por favor, responde en formato Markdown siguiendo estas pautas:\n\n"
         "1. **Título**: Comienza con un título breve y relevante para el análisis.\n"
@@ -71,6 +71,8 @@ async def chat_better_answers(agent_response: dict) -> str:
         "puedes incluir tendencias, anomalías, contexto, oportunidades, riesgos, etc. "
         "No sigas un formato rígido, adapta el análisis a lo que veas en los datos.\n"
         "3. **Tabla de datos**: Incluye la tabla completa, con todos los datos presentes en returned_json. Si los datos no son relevantes, omite esta sección. Si lo son, muestra TODA la tabla. \n"
+        "   Considera que si los datos son de revenue, estan siempre en dolares americanos (USD).\n Agregalo a la tabla. "
+        "   Corrige el formato de los numeros, con comas como separador de miles y punto como separador decimal. "
         "4. **Recomendaciones**: Propón acciones concretas y prácticas basadas en los datos, "
         "adaptadas al día a día del resort. Que sean claras, realistas y directamente aplicables. Solo haz esto si la data es suficiente para que sea útil. Si no, omite esta sección. \n"
         "5. **Cierre**: Termina con un recordatorio de que solo se usó la información proporcionada y mantén siempre el tono cercano.\n\n"

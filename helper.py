@@ -1,194 +1,98 @@
-from datetime import datetime
-import json
+import os
+import io
 import random
 import string
-from typing import Any, List, Dict, Optional
-
 import requests
+
+from datetime import datetime
+
 import pandas as pd
 import matplotlib.pyplot as plt
-import io
-import base64
-import json
+import sqlite3
 
+# para cargar archivos de knowledge
+def load_context(filename):
+    with open(filename, "r", encoding="utf-8") as f:
+        return f.read()
 
-def _generate_graphs_impl(
-    data: List[Dict[str, Any]],
-    chart_type: str,
-    x: str,
-    y: str = ""
-) -> str:
+# Implementación de funciones para obtener el esquema de las tablas:
+def reservations_schema(db_path: str = "../resv.db", table_name: str = "reservations") -> str:
+    """Devuelve un string con las columnas y tipos de la tabla `reservations` de resv.db."""
+    if not os.path.isfile(db_path):
+        return "(Esquema no disponible: base de datos no encontrada)"
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"PRAGMA table_info({table_name})")
+        cols = cur.fetchall()
+    except Exception as e:
+        conn.close()
+        return "(Esquema no disponible: error al leer la tabla)"
+    conn.close()
+    if not cols:
+        return "(Tabla vacía o no encontrada)"
+    # Formatear las columnas como "nombre (TIPO)" separadas por comas
+    col_defs = [f"{col[1]} ({col[2]})" for col in cols]  # col[1]=nombre, col[2]=tipo
+    return ", ".join(col_defs)
+
+def upload_to_file_server(file_path: str = None, buf: io.BytesIO = None) -> str:
     """
-    data: lista de diccionarios con tus filas de returned_json
-    chart_type: "bar", "line" o "pie"
-    x: nombre de la columna para el eje X
-    y: nombre de la columna para el eje Y (puede quedar "")
-    
-    Devuelve un PNG codificado en Base64.
+    Sube un archivo (desde ruta local o buffer) al servidor y devuelve la URL pública.
     """
 
-    print(f"[DEBUG] - Iniciando herramienta de graficacion")
-    print(f"[DEBUG] - Los parametros recibidos son los siguientes: \n\tTipo: {chart_type} \n\tx: {x} \n\ty: {y}")
-
-    # 1) Cargar los datos en un DataFrame
-    df = pd.DataFrame(data)
-
-    # Filtrar filas con valores nulos en x o y
-    df = df[df[x].notnull() & df[y].notnull()]
-
-    # 2) Preparar figura
-    plt.figure(figsize=(10, 6))
-    ct = chart_type.lower()
-
-    # 3) Dibujar según el tipo
-    if ct == "bar":
-        plt.bar(df[x], df[y])
-        plt.xlabel(x)
-        plt.ylabel(y)
-        plt.xticks(rotation=45)
-    elif ct == "line":
-        # Asegurarse de que x sea datetime si corresponde
-        try:
-            df[x] = pd.to_datetime(df[x])
-        except Exception:
-            pass
-        df = df.sort_values(by=x)
-        plt.plot(df[x], df[y], marker="o")
-        plt.xlabel(x)
-        plt.ylabel(y)
-        plt.xticks(rotation=45)
-    elif ct == "pie":
-        plt.pie(df[y], labels=df[x], autopct="%1.1f%%")
-    else:
-        # Si el tipo no es soportado, devolvemos cadena vacía
-        print(f"[DEBUG] - El tipo de la herramienta no es soportado. ")
-        return ""
-
-    # 4) Título y ajustes
-    plt.title(f"{ct.capitalize()} Chart: {y} by {x}")
-    plt.tight_layout()
-
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png")
-    buf.seek(0)
-    plt.close()
-
-    # 5) Generar nombre único: YYYYMMDD-HHMMSS-XYZ.png
+    # Genera nombre único
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     rand_suffix = "".join(random.choices(string.ascii_letters + string.digits, k=3))
     filename = f"{timestamp}-{rand_suffix}.png"
 
-    # 6) Subir la imagen
+    # Decide fuente de datos
+    if buf is not None:
+        file_data = (filename, buf, "image/png")
+    elif file_path is not None:
+        with open(file_path, "rb") as f:
+            file_data = (filename, f, "image/png")
+    else:
+        raise ValueError("Debes proporcionar file_path o buf")
+
     resp = requests.post(
         "https://agents.garooinc.com/upload",
-        files={"file": (filename, buf, "image/png")}
+        files={"file": file_data}
     )
     resp.raise_for_status()
     result = resp.json()
 
-    # Verifica que el servidor confirme la subida y devuelva la URL
     if resp.status_code == 200 and result.get("success", True):
         url_img = "https://agents.garooinc.com/files/" + filename
         return url_img
     else:
-        print(f"[DEBUG] - Falló la subida de la imagen: {result}")
-        return ""
+        raise Exception(f"Error al subir el archivo: {result.get('error', 'Unknown error')}")
+    
 
+def execute_graph_agent_code(code: str, table_data: list, output_file:str = "out.png") -> str:
+    """
+    Executes python code generated from the graph_code_agent and uploads the resulting image to the file server.
+    """
+    img_buf = io.BytesIO()
 
-# JSON-Schema que solo acepta strings para evitar validación de objetos anidados
-graph_tool_schema = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "returned_json": {"type": "string"},  # aquí metemos json.dumps(returned_json)
-        "userQuery": {"type": "string"}
-    },
-    "required": ["returned_json", "userQuery"]
-}
+    code = code.replace("plt.show()", "")
 
-def _graph_all_in_one_impl(returned_json: str, userQuery: str) -> Dict[str, Any]:
-    # 1) Deserializar la tabla
-    table = json.loads(returned_json)
-
-    # 2) Decidir tipo de gráfico
-    q = userQuery.lower()
-    if "line" in q or "tendencia" in q:
-        ct = "line"
-    elif "pie" in q or "%" in q or "torta" in q:
-        ct = "pie"
-    else:
-        ct = "bar"
-
-    # 3) Elegir ejes X/Y
-    first = table[0] if table else {}
-    text_cols = [k for k,v in first.items() if isinstance(v, str)]
-    x = text_cols[0] if text_cols else next(iter(first), "")
-    y = ""
-    for k,v in first.items():
-        if k != x and isinstance(v, (int, float)):
-            y = k
-            break
-
-    # 4) Generar la imagen
-    url_img = _generate_graphs_impl(table, ct, x, y)
-
-    # 5) Devolver solo los campos necesarios
-    return {
-        "url_img":        url_img
+    exec_globals = {
+        "table_data": table_data,
+        "pd": pd,
+        "plt": plt,
+        "img_buf": img_buf
     }
 
-def format_as_markdown(
-    title: str,
-    resp: Dict[str, Any],
-    key_findings: str,
-    methodology: str,
-    interpretation: str,
-    recommendations: str,
-    conclusion: str,
-    url_img: Optional[str] = None
-) -> str:
-    md = f"# {title}\n\n"
-
-    rows = resp.get("returned_json", [])
-    if rows and isinstance(rows, list):
-        headers = list(rows[0].keys())
-        md += "## Datos\n\n"
-        md += "|" + "|".join(headers) + "|\n"
-        md += "|" + "|".join("---" for _ in headers) + "|\n"
-        for row in rows:
-            cells = []
-            for h in headers:
-                val = row.get(h)
-                if val is None:
-                    cells.append("")
-                elif isinstance(val, (int, float)):
-                    # Formato correcto: coma miles, punto decimal
-                    cells.append(f"{val:,.2f}")
-                else:
-                    cells.append(str(val))
-            md += "|" + "|".join(cells) + "|\n"
-        md += "\n"
-    else:
-        md += "_No hay datos en returned_json_\n\n"
-
-    md += "## Hallazgos clave\n\n"
-    md += key_findings + "\n\n"
-
-    md += "## Metodología\n\n"
-    md += methodology + "\n\n"
-
-    md += "## Interpretación de resultados\n\n"
-    md += interpretation + "\n\n"
-
-    md += "## Recomendaciones\n\n"
-    md += recommendations + "\n\n"
-
-    md += "## Conclusión\n\n"
-    md += conclusion + "\n\n"
-
-    if url_img:
-        md += "## Gráfica\n\n"
-        md += f"![Gráfico]({url_img})\n"
-
-    return md
+    print(f"[DEBUG] - Ejecutando código del agente de gráficos:\n{code}")
+    try:
+        exec(code, exec_globals)
+    except Exception as e:
+        raise RuntimeError(f"Error al ejecutar el código del agente de gráficos: {e}")
+    
+    if img_buf.getbuffer().nbytes == 0:
+        raise ValueError("El código del agente de gráficos no generó una imagen válida.")
+    
+    public_url = upload_to_file_server(buf=img_buf)
+    print(f"[DEBUG] - Imagen subida correctamente: {public_url}")
+    return public_url
 

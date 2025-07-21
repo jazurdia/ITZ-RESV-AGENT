@@ -1,18 +1,10 @@
-import json
 import sqlite3
 from typing import Any, List, Dict, TypedDict
-from pydantic import BaseModel
 from agents import Agent, function_tool, AgentOutputSchema
-from agents.tool import FunctionTool
-from agents.tool import CodeInterpreterTool
 
-from data_processing.load_xlsx_to_sqlite import reservations_schema
-
-from helper import _graph_all_in_one_impl, graph_tool_schema
-
+from helper import reservations_schema
 from typing_extensions import TypedDict
 
-from aux_scripts.contexto import string_contexto
 
 # ----------------------------------
 #         Analysis Agent 
@@ -30,9 +22,7 @@ class AnalysisOutput(TypedDict):
     returned_json: List[Dict[str, Any]]
     findings: str
     methodology: str
-    #results_interpretation: str
-    #recommendations: str
-    #conclusion: str
+
 
 @function_tool
 def execute_query_to_sqlite(query: str) -> Any:
@@ -107,7 +97,32 @@ reservations_agent = Agent(
 #       Graph Generator Agent
 # ----------------------------------
 
-# So far... this is what I have. https://chatgpt.com/share/6879f4c5-38e8-8007-9584-437fe067a02d
+class GraphCodeOutput(TypedDict):
+    code: str  # Python code for plotting
+
+
+graph_code_agent_instructions = """
+    You will receive:
+    - `table_data`: a Python list of dictionaries (already loaded), each representing a row in a table.
+    - `img_buf`: an open BytesIO buffer available for you to save the figure into.
+    - `user_question`: the user's request for a specific plot.
+
+    Write Python code using ONLY `table_data` and `img_buf` as already available variables.
+    Do NOT load or declare `table_data` or `img_buf`.
+    Do NOT call plt.show() anywhere.
+    Do NOT use 'import' statements for them.
+    Just use pandas and matplotlib to generate the requested plot and save it into the provided `img_buf` with `plt.savefig(img_buf, format='png')` and `img_buf.seek(0)`.
+    Do NOT return anything but the code.
+"""
+
+
+graph_code_agent = Agent(
+    name="GraphCodeAgent",
+    instructions=graph_code_agent_instructions,
+    model="gpt-4o",
+    output_type=AgentOutputSchema(GraphCodeOutput, strict_json_schema=False)
+)
+
 
 
 

@@ -1,30 +1,23 @@
+import os
+import json
+import logging
+import traceback
+import uvicorn
+
 from fastapi import FastAPI, HTTPException
-from httpcore import request
 from pydantic import BaseModel
-from ItzanaAgents import reservations_agent
-from agents import Runner
-from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 from typing import List, Dict, Any, Optional
 
-from helper import _generate_graphs_impl
+from dotenv import load_dotenv
 
-import json
-from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
-
-from helper import format_as_markdown
-
-import traceback
-
-import logging
-from openai import OpenAI
-
+from ItzanaAgents import reservations_agent, graph_code_agent
+from agents import Runner
+from helper import execute_graph_agent_code
 from chat_module import chat_betterQuestions, chat_better_answers
 
-from aux_scripts.config import OPENAI_API_KEY
 
-load_dotenv()  # Carga las variables de entorno desde .env
+# Carga las variables de entorno desde .env
+load_dotenv()
 
 def setup_logging():
     logging.basicConfig(
@@ -43,17 +36,6 @@ app = FastAPI(
     version="1.0.0",
 )
 
-class outputAsk(BaseModel): # creo que ya no se usa. 
-    title: str
-    returned_json: List[Dict[str, Any]]
-    findings: str
-    methodology: str
-    #results_interpretation: str
-    #recommendations: str
-    #conclusion: str
-    #url_img: Optional[str] = None
-    better_answers: str
-
 class outputAsk2(BaseModel):
     markdown : str
 
@@ -61,28 +43,53 @@ class outputAsk2(BaseModel):
 GRAPH_KEYWORDS = [
     "grafica", "gráfico", "gráfica",
     "grafico", "visualiza", "visualización",
-    "diagrama", "imagen", "representa"
+    "diagrama", "imagen", "representa",
+    "graph", "chart", "plot", "visualize", "diagram", "picture", "figure"
 ]
 
 @app.post("/ask", response_model=outputAsk2)
 async def query_agent(request: QueryRequest):
     try:
 
-        print(f"[DEBUG] - Pregunta recibida: {request.question}")
+        flag_graph = any(keyword in request.question.lower() for keyword in GRAPH_KEYWORDS)
 
         better_question = await chat_betterQuestions(request.question)
-        
         print(f"[DEBUG] - Pregunta mejorada: {better_question}")
 
-        print(f"[INFO] - Iniciando el agente de reservaciones")
         # 1) Llamas al agente SQL
         resp = await Runner.run(reservations_agent, better_question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
-        print(f"[DEBUG] - Respuesta del agente de reservaciones: \n------------------------\n{json.dumps(raw, ensure_ascii=False)} \n------------------------\n")
+        table_data = raw.get("returned_json", [])
+        print(f"[DEBUG] - Datos de la tabla: {table_data}")
+
+        # second agent: Graph Generator Agent
+        if flag_graph and raw.get("returned_json", []):  # Solo si hay datos en returned_json
+
+            try:
+                graph_payload = {
+                    "table_data": table_data,
+                    "user_question": request.question
+                }
+
+                # llamada al agente de codigo para graficos
+                resp_graph = await Runner.run(graph_code_agent, json.dumps(graph_payload))
+                resp_graph_code = resp_graph.final_output["code"]
+                print(f"[DEBUG] - Código del agente de gráficos:\n{resp_graph_code}")
+
+                # Ejecutar el código del agente de gráficos
+                url_img = execute_graph_agent_code(resp_graph_code, table_data)
+                print(f"[DEBUG] -  URL Imagen generada: {url_img}")
+
+                # add la URL de la imagen al raw
+                raw["graph_url"] = url_img
+
+            except Exception as e:
+                print(f"[ERROR] - Error al generar la gráfica: {e}")
 
         betterAnswers = await chat_better_answers(raw)
+        print(f"[DEBUG] - Respuesta mejorada: \n\n{betterAnswers}\n\n")
 
-        print(f"\n[DEBUG] - Respuesta mejorada: \n------------------------\n\n{betterAnswers}")
+        # print(f"\n[DEBUG] - Respuesta mejorada: \n------------------------\n\n{betterAnswers}")
 
         return {"markdown" : betterAnswers}
         
@@ -94,11 +101,8 @@ async def query_agent(request: QueryRequest):
             detail={"error": str(e), "traceback": tb}
         )
 
-
-
 if __name__ == "__main__":
     # Ejecutar con: python app.py o uvicorn app:app --reload --host 0.0.0.0 --port 8000
-    import uvicorn
     # Levanta la app desde este módulo (app.py)
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
 
