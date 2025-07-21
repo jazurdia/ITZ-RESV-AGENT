@@ -1,46 +1,42 @@
-import json
 import sqlite3
-from typing import Any, List, Dict
-from pydantic import BaseModel
+from typing import Any, List, Dict, TypedDict
 from agents import Agent, function_tool, AgentOutputSchema
-from agents.tool import FunctionTool
-from load_xlsx_to_sqlite import reservations_schema, groupedaccounts_schema
 
-from helper import _graph_all_in_one_impl, graph_tool_schema
-
+from helper import get_db, get_itzana_knowledge, get_wholesalers_list, get_reservations_columns
 from typing_extensions import TypedDict
 
-from contexto import string_contexto
 
 # ----------------------------------
 #         Analysis Agent 
 # ----------------------------------
+
+reservations_columns = get_reservations_columns()
+wholesalers_list = get_wholesalers_list()
+itzana_knowledge = get_itzana_knowledge()
 
 class AnalysisOutput(TypedDict):
     """
     Esquema de salida estricto:
     - title: titulo de la respuesta. 
     - returned_json: lista de objetos con los resultados de la consulta
-    - key_findings: resumen de los hallazgos principales
+    - findings: resumen de los hallazgos principales
     - methodology: descripción del proceso y filtros aplicados
-    - results_interpretation: interpretación de lo que significan los datos
-    - recommendations: acciones recomendadas de acuerdo con la pregunta y los datos extraidos.
-    - conclusion: conclusiones y próximos pasos
     """
     title: str
     returned_json: List[Dict[str, Any]]
-    key_findings: str
+    findings: str
     methodology: str
-    results_interpretation: str
-    recommendations: str
-    conclusion: str
+
 
 @function_tool
 def execute_query_to_sqlite(query: str) -> Any:
     """Ejecuta la consulta SQL en Itzana.db y retorna resultados."""
     conn = None
+
+    print(f"[DEBUG] - Consulta SQL generada por el agente:\n{query}")  # <-- Agrega este print
+
     try:
-        conn = sqlite3.connect("Itzana.db")
+        conn = sqlite3.connect(get_db())
         cursor = conn.cursor()
         cursor.execute(query)
         if query.strip().lower().startswith("select"):
@@ -59,43 +55,39 @@ def execute_query_to_sqlite(query: str) -> Any:
 
 # Instrucciones para el agente de reservaciones
 reservations_instructions = f"""
-Eres un analista de datos con acceso a una base SQLite llamada `Itzana.db`. La tabla principal es `reservations`.
-El esquema de la tabla `reservations` es el siguiente: {reservations_schema()}.
+Eres un analista de datos con acceso a una base SQLite llamada `resv.db`. La tabla principal es `reservations`.
+El esquema de la tabla `reservations` es el siguiente: {reservations_columns}.
 
 Tu tarea es, a partir de la pregunta del usuario, **generar una consulta SQL (SQLite)** sobre la tabla `reservations` que permita responder a la pregunta. Debes razonar qué datos solicitar.
-
-Al generar tu respuesta, debes tener en cuenta la siguiente informacion general sobre la empresa: {string_contexto}. Esta informacion es crucial para todas las respuestas que generes y siempre debes tomarla en cuenta. 
-Debes entender el contexto de la empresa y sus operaciones para generar respuestas relevantes y útiles.
-Debes hacer que los resultados de la consulta sql funionen con el contexto de la empresa y su operativa.
+nota: toma en cuenta que el formato de fechas es YYYY-MM-DD y que los montos son en USD. Por esto, usa strftime('%Y-%m', ...) para agrupar por mes y año.
+Las columnas de fecha son `ARRIVAL` Y `DEPARTURE`.
 
 Una vez generada la consulta, úsala llamando a la herramienta `execute_query_to_sqlite` para obtener los datos en formato JSON. **Luego, debes entregar tu respuesta en un JSON con los siguientes campos**:
 
-- `title`: un nombre para la respuesta. 
+- `title`: un título descriptivo de la respuesta.
 - `returned_json`: el resultado devuelto por la consulta (en JSON).
-- `methodology`: descripción del proceso, filtros o agregaciones aplicados sin mencionar nombres de columna. 
-- `results_interpretation`: interpretación de lo que significan los datos en el contexto de negocio. Debe ser extenso. 
-- `key_findings`: resumen de los hallazgos principales extraídos de `returned_json`.
-- `recommendations`: genera recomendaciones de acuerdo a la pregunta y los datos extraidos. Toma en cuenta la inforamcion de la empresa siempre para generar este campo de la respuesta. 
-- `conclusion`: conclusiones y próximos pasos sugeridos.
+- `findings`: explicacion de los datos encontrados.
+- `methodology`: descripción de cómo se generó la consulta y qué filtros se aplicaron.
 
 Devuelve **solo** un objeto JSON válido con este esquema:
 
 {{
-  "title": "..."
+  "title": "Título descriptivo de la respuesta",
   "returned_json": [...],
-  "key_findings": "...",
-  "methodology": "...",
-  "results_interpretation": "...",
-  "recommendations": "..."
-  "conclusion": "..."
+  "findings": "...",
+  "methodology": "..."
 }}
 
 NOTAS:
 - Si la pregunta menciona wholesalers, debes usar el campo COMPANY_NAME.
 - No uses nunca los nombres de las columnas como respuestas, debes adaptar este nombre a un lenguaje conversacional. 
 - Responde en el lenguaje de la pregunta. 
+- las unidades monetarias son en USD.
+- toda la informacion de la tabla `reservations` es del resort Itzana. Por lo que no vale la pena incluirlo al hacer consultas. 
+- en otras palabras, no uses WHERE RESORT = 'Itz''ana'. 
 
 """
+
 
 reservations_agent = Agent(
     name="ReservationsAgent",
@@ -107,64 +99,35 @@ reservations_agent = Agent(
 )
 
 # ----------------------------------
-#       Graphicator Agent 
+#       Graph Generator Agent
 # ----------------------------------
 
-# --- Esquema de salida para la decisión ---
-class GraphChoice(TypedDict):
-    chart_type: str
-    x: str
-    y: str
+class GraphCodeOutput(TypedDict):
+    code: str  # Python code for plotting
 
-# --- El único FunctionTool: decide_chart_type_xy ---
-@function_tool
-def decide_graph(data_json: str, userQuery: str) -> GraphChoice:
-    """
-    data_json: JSON-string de returned_json (la tabla).
-    userQuery: la pregunta original.
-    Devuelve un JSON con chart_type, x, y.
-    """
-    table = json.loads(data_json)
-    first = table[0] if table else {}
-    q = userQuery.lower()
 
-    # 1) Tipo de gráfico
-    if "line" in q or "tendencia" in q:
-        ct = "line"
-    elif "pie" in q or "%" in q or "torta" in q:
-        ct = "pie"
-    else:
-        ct = "bar"
+graph_code_agent_instructions = """
+    You will receive:
+    - `table_data`: a Python list of dictionaries (already loaded), each representing a row in a table.
+    - `img_buf`: an open BytesIO buffer available for you to save the figure into.
+    - `user_question`: the user's request for a specific plot.
 
-    # 2) Eje X: primer campo de texto
-    text_cols = [k for k,v in first.items() if isinstance(v, str)]
-    x = text_cols[0] if text_cols else next(iter(first), "")
-
-    # 3) Eje Y: primer campo numérico distinto de X
-    y = ""
-    for k,v in first.items():
-        if k != x and isinstance(v, (int, float)):
-            y = k
-            break
-
-    return {"chart_type": ct, "x": x, "y": y}
-
-# --- Agente que usa sólo ese tool ---
-graph_decider_instructions = """
-Eres un agente que decide el tipo de gráfico y los ejes.
-Recibes dos parámetros:
-- data_json: un string JSON con la lista returned_json.
-- userQuery: la pregunta original.
-
-Debes invocar la herramienta decide_graph con esos dos parámetros
-y devolver únicamente su salida (el JSON con chart_type, x, y).
+    Write Python code using ONLY `table_data` and `img_buf` as already available variables.
+    Do NOT load or declare `table_data` or `img_buf`.
+    Do NOT call plt.show() anywhere.
+    Do NOT use 'import' statements for them.
+    Just use pandas and matplotlib to generate the requested plot and save it into the provided `img_buf` with `plt.savefig(img_buf, format='png')` and `img_buf.seek(0)`.
+    Do NOT return anything but the code.
 """
 
 
-graph_decider_agent = Agent(
-    name="GraphDeciderAgent",
-    instructions=graph_decider_instructions,
+graph_code_agent = Agent(
+    name="GraphCodeAgent",
+    instructions=graph_code_agent_instructions,
     model="gpt-4o",
-    tools=[decide_graph],
-    output_type=AgentOutputSchema(GraphChoice, strict_json_schema=False)
+    output_type=AgentOutputSchema(GraphCodeOutput, strict_json_schema=False)
 )
+
+
+
+

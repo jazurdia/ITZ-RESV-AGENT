@@ -1,5 +1,5 @@
 
-# Itz'ana Resort & Residences - Base de Conocimiento GPT
+# Itz'ana Resort & Residences - Base de Conocimiento
 
 ## 1. Identidad y Ubicación
 Resort de lujo en Placencia, Belice, rodeado por el mar Caribe y la selva tropical. Filosofía de “lujo bohemio con espíritu aventurero”, punto de partida para explorar la segunda barrera de coral más grande del mundo y zonas arqueológicas mayas. Renovado y ampliado en 2018.

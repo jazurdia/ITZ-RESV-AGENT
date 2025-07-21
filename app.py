@@ -1,57 +1,40 @@
+import os
+import json
+import logging
+import traceback
+import uvicorn
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from ItzanaAgents import reservations_agent, graph_decider_agent
-from load_xlsx_to_sqlite import (
-    load_reservations_to_sqlite,
-    load_grouped_accounts_to_sqlite,
-    delete_itzana_db
-)
-from agents import Runner
-from contextlib import asynccontextmanager
-from dotenv import load_dotenv
 from typing import List, Dict, Any, Optional
 
-from helper import _generate_graphs_impl
+from dotenv import load_dotenv
 
-import json
-from fastapi.responses import JSONResponse
-from fastapi.encoders import jsonable_encoder
-
-from helper import format_as_markdown
-
-import traceback
+from ItzanaAgents import reservations_agent, graph_code_agent
+from agents import Runner
+from helper import execute_graph_agent_code
+from chat_module import chat_betterQuestions, chat_better_answers
 
 
-
+# Carga las variables de entorno desde .env
 load_dotenv()
+
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
 class QueryRequest(BaseModel):
     question: str
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Limpiar y cargar la base de datos al iniciar la API
-    delete_itzana_db()
-    load_reservations_to_sqlite("data/reservations.xlsx")
-    load_grouped_accounts_to_sqlite("data/grouped_accounts.xlsx")
-    yield
 
 app = FastAPI(
     title="Itzana Agents API",
     description="API para ejecutar los agentes de análisis (currently 1)",
     version="1.0.0",
-    # lifespan=lifespan
 )
-
-class OutputAsk(BaseModel): # creo que ya no se usa. 
-    title: str
-    returned_json: List[Dict[str, Any]]
-    key_findings: str
-    methodology: str
-    results_interpretation: str
-    recommendations: str
-    conclusion: str
-    url_img: Optional[str] = None
 
 class outputAsk2(BaseModel):
     markdown : str
@@ -60,63 +43,55 @@ class outputAsk2(BaseModel):
 GRAPH_KEYWORDS = [
     "grafica", "gráfico", "gráfica",
     "grafico", "visualiza", "visualización",
-    "diagrama", "imagen", "representa"
+    "diagrama", "imagen", "representa",
+    "graph", "chart", "plot", "visualize", "diagram", "picture", "figure"
 ]
 
 @app.post("/ask", response_model=outputAsk2)
 async def query_agent(request: QueryRequest):
     try:
-        print(f"[DEBUG] - Pregunta recibida: {request.question}")
 
-        print(f"[DEBUG] - Iniciando el agente de reservaciones")
+        flag_graph = any(keyword in request.question.lower() for keyword in GRAPH_KEYWORDS)
+
+        better_question = await chat_betterQuestions(request.question)
+        print(f"[DEBUG] - Pregunta mejorada: {better_question}")
+
         # 1) Llamas al agente SQL
-        resp = await Runner.run(reservations_agent, request.question)
+        resp = await Runner.run(reservations_agent, better_question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
-        print(f"[DEBUG] - Respuesta del agente de reservaciones: {json.dumps(raw, ensure_ascii=False)}")
-        try: 
-            # 2) Si pide gráfico, decides parámetros
-            if any(k in request.question.lower() for k in GRAPH_KEYWORDS):
-                data_json = json.dumps(raw["returned_json"])
-                # 3) Invoca al agente decidor (siempre recibe un STRING)
-                payload = json.dumps({"data_json": data_json, "userQuery": request.question})
-                print(f"[DEBUG] - Intentando Ejecutar el agente grafico")
-                dec = await Runner.run(graph_decider_agent, payload)
-                choice: Dict[str, str] = dec.final_output
-                print(f"[DEBUG] - El agente ha tomado la siguiente desicion: {json.dumps(choice, ensure_ascii=False)}")
+        table_data = raw.get("returned_json", [])
+        print(f"[DEBUG] - Datos de la tabla: {table_data}")
 
-                print(f"[DEBUG] - Se inicia la herramienta de graficacion. ")
-                # 4) Generas la gráfica tú mismo
-                raw["url_img"] = _generate_graphs_impl(
-                    raw["returned_json"],
-                    choice["chart_type"],
-                    choice["x"],
-                    choice["y"]
-                )
+        # second agent: Graph Generator Agent
+        if flag_graph and raw.get("returned_json", []):  # Solo si hay datos en returned_json
 
-                print(f"[DEBUG] - La herramienta ha terminado de generar la imagen. ")
+            try:
+                graph_payload = {
+                    "table_data": table_data,
+                    "user_question": request.question
+                }
 
-        except Exception as e:
-            print("[DEBUG] Problema al ejecutar el agente grafico")
-            tb = traceback.format_exc()
-            print(f"[DEBUG] - ERROR: {str(e)} TRACEBACK: {tb}")
+                # llamada al agente de codigo para graficos
+                resp_graph = await Runner.run(graph_code_agent, json.dumps(graph_payload))
+                resp_graph_code = resp_graph.final_output["code"]
+                print(f"[DEBUG] - Código del agente de gráficos:\n{resp_graph_code}")
 
-        print(f"[DEBUG] - Preparando la respuesta final")
+                # Ejecutar el código del agente de gráficos
+                url_img = execute_graph_agent_code(resp_graph_code, table_data)
 
+                # add la URL de la imagen al raw
+                raw["graph_url"] = url_img
 
-        # 3. Formatear como Markdown
-        md = format_as_markdown(
-            title = raw["title"],
-            resp={"returned_json": raw["returned_json"]},
-            key_findings=raw["key_findings"],
-            methodology=raw["methodology"],
-            interpretation=raw["results_interpretation"],
-            recommendations = raw["recommendations"],
-            conclusion=raw["conclusion"],
-            url_img = raw["url_img"] if "url_img" in raw else None
-        )
+            except Exception as e:
+                print(f"[ERROR] - Error al generar la gráfica: {e}")
 
-        # 4. Devolver solo el Markdown como JSON
-        return outputAsk2(markdown=md)
+        betterAnswers = await chat_better_answers(raw)
+        print(f"[DEBUG] - Respuesta mejorada: \n\n{betterAnswers}\n\n")
+
+        # print(f"\n[DEBUG] - Respuesta mejorada: \n------------------------\n\n{betterAnswers}")
+
+        return {"markdown" : betterAnswers}
+        
 
     except Exception as e:
         tb = traceback.format_exc()
@@ -125,17 +100,8 @@ async def query_agent(request: QueryRequest):
             detail={"error": str(e), "traceback": tb}
         )
 
-
-@app.post("/reload", summary="Recarga la base de datos desde los archivos XLSX")
-async def reload_db():
-    delete_itzana_db()
-    reservas = load_reservations_to_sqlite("data/reservations.xlsx")
-    cuentas = load_grouped_accounts_to_sqlite("data/grouped_accounts.xlsx")
-    return {"reservations_loaded": reservas, "accounts_loaded": cuentas}
-
 if __name__ == "__main__":
     # Ejecutar con: python app.py o uvicorn app:app --reload --host 0.0.0.0 --port 8000
-    import uvicorn
     # Levanta la app desde este módulo (app.py)
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
 
