@@ -2,13 +2,17 @@ import sqlite3
 from typing import Any, List, Dict, TypedDict
 from agents import Agent, function_tool, AgentOutputSchema
 
-from helper import reservations_schema
+from helper import get_db, get_itzana_knowledge, get_wholesalers_list, get_reservations_columns
 from typing_extensions import TypedDict
 
 
 # ----------------------------------
 #         Analysis Agent 
 # ----------------------------------
+
+reservations_columns = get_reservations_columns()
+wholesalers_list = get_wholesalers_list()
+itzana_knowledge = get_itzana_knowledge()
 
 class AnalysisOutput(TypedDict):
     """
@@ -32,7 +36,7 @@ def execute_query_to_sqlite(query: str) -> Any:
     print(f"[DEBUG] - Consulta SQL generada por el agente:\n{query}")  # <-- Agrega este print
 
     try:
-        conn = sqlite3.connect("resv.db")
+        conn = sqlite3.connect(get_db())
         cursor = conn.cursor()
         cursor.execute(query)
         if query.strip().lower().startswith("select"):
@@ -52,7 +56,7 @@ def execute_query_to_sqlite(query: str) -> Any:
 # Instrucciones para el agente de reservaciones
 reservations_instructions = f"""
 Eres un analista de datos con acceso a una base SQLite llamada `resv.db`. La tabla principal es `reservations`.
-El esquema de la tabla `reservations` es el siguiente: {reservations_schema()}.
+El esquema de la tabla `reservations` es el siguiente: {reservations_columns}.
 
 Tu tarea es, a partir de la pregunta del usuario, **generar una consulta SQL (SQLite)** sobre la tabla `reservations` que permita responder a la pregunta. Debes razonar qué datos solicitar.
 nota: toma en cuenta que el formato de fechas es YYYY-MM-DD y que los montos son en USD. Por esto, usa strftime('%Y-%m', ...) para agrupar por mes y año.
@@ -83,6 +87,7 @@ NOTAS:
 - en otras palabras, no uses WHERE RESORT = 'Itz''ana'. 
 
 """
+
 
 reservations_agent = Agent(
     name="ReservationsAgent",

@@ -1,3 +1,4 @@
+import json
 import os
 import io
 import random
@@ -10,30 +11,62 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import sqlite3
 
+def load_json(filename: str) -> dict:
+    """
+    Carga un archivo JSON y devuelve su contenido como un diccionario.
+    """
+    with open(filename, "r", encoding="utf-8") as f:
+        return json.load(f)
+    
+def get_db() -> str:
+    try:
+        # Obtiene la ruta absoluta del archivo de configuración
+        config_path = os.path.abspath('config/db_conn.json')
+        
+        # Carga el archivo JSON
+        db_conn_json = load_json(config_path)
+        
+        # Extrae el filepath de la base de datos o usa el valor por defecto
+        db_filepath = db_conn_json.get('db_filepath', 'data/resv.db')
+        
+        # Convierte la ruta de la base de datos a absoluta
+        return os.path.abspath(db_filepath)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        # Manejo de errores en caso de que el archivo no exista o sea inválido
+        raise RuntimeError(f"Error al cargar la configuración de la base de datos: {e}")
+    
+def get_itzana_knowledge() -> str:
+    """
+    Carga el conocimiento de Itzana desde el archivo de contexto.
+    """
+    try:
+        return load_context("knowledge/itzana_context.md")
+    except FileNotFoundError:
+        return "No se pudo cargar el conocimiento de Itzana. Asegúrate de que el archivo exista."
+    
+def get_wholesalers_list() -> str:
+    """
+    Carga la lista de mayoristas desde el archivo de texto.
+    """
+    try:
+        return load_context("knowledge/wholesalers.txt")
+    except FileNotFoundError:
+        return "No se pudo cargar la lista de mayoristas. Asegúrate de que el archivo exista."
+    
+def get_reservations_columns() -> str:
+    """
+    Carga las columnas de la tabla de reservas desde el archivo de contexto.
+    """
+    try:
+        return load_context("knowledge/reservations_columns.md")
+    except FileNotFoundError:
+        return "No se pudo cargar las columnas de reservas. Asegúrate de que el archivo exista."
+
 # para cargar archivos de knowledge
 def load_context(filename):
     with open(filename, "r", encoding="utf-8") as f:
         return f.read()
 
-# Implementación de funciones para obtener el esquema de las tablas:
-def reservations_schema(db_path: str = "../resv.db", table_name: str = "reservations") -> str:
-    """Devuelve un string con las columnas y tipos de la tabla `reservations` de resv.db."""
-    if not os.path.isfile(db_path):
-        return "(Esquema no disponible: base de datos no encontrada)"
-    conn = sqlite3.connect(db_path)
-    cur = conn.cursor()
-    try:
-        cur.execute(f"PRAGMA table_info({table_name})")
-        cols = cur.fetchall()
-    except Exception as e:
-        conn.close()
-        return "(Esquema no disponible: error al leer la tabla)"
-    conn.close()
-    if not cols:
-        return "(Tabla vacía o no encontrada)"
-    # Formatear las columnas como "nombre (TIPO)" separadas por comas
-    col_defs = [f"{col[1]} ({col[2]})" for col in cols]  # col[1]=nombre, col[2]=tipo
-    return ", ".join(col_defs)
 
 def upload_to_file_server(file_path: str = None, buf: io.BytesIO = None) -> str:
     """
@@ -54,18 +87,27 @@ def upload_to_file_server(file_path: str = None, buf: io.BytesIO = None) -> str:
     else:
         raise ValueError("Debes proporcionar file_path o buf")
 
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
+
     resp = requests.post(
-        "https://agents.garooinc.com/upload",
-        files={"file": file_data}
+        "https://agents.garooinc.com/upload/itzana-agents",
+        files={"file": file_data},
+        headers=headers
     )
     resp.raise_for_status()
     result = resp.json()
 
-    if resp.status_code == 200 and result.get("success", True):
-        url_img = "https://agents.garooinc.com/files/" + filename
-        return url_img
-    else:
-        raise Exception(f"Error al subir el archivo: {result.get('error', 'Unknown error')}")
+    # la respuesta es asi:
+    # {
+    #  "message": "Archivo subido correctamente como '1617b5d2-92b0-4594-9d78-657408721b75.png'",
+    #  "url": "https://agents.garooinc.com/files/itzana-agents/1617b5d2-92b0-4594-9d78-657408721b75.png"
+
+    if "url" not in result:
+        raise ValueError("Respuesta inesperada del servidor: no se encontró la URL")
+    return result["url"]  # Devuelve la URL pública del archivo subido
+
     
 
 def execute_graph_agent_code(code: str, table_data: list, output_file:str = "out.png") -> str:

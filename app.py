@@ -78,7 +78,6 @@ async def query_agent(request: QueryRequest):
 
                 # Ejecutar el código del agente de gráficos
                 url_img = execute_graph_agent_code(resp_graph_code, table_data)
-                print(f"[DEBUG] -  URL Imagen generada: {url_img}")
 
                 # add la URL de la imagen al raw
                 raw["graph_url"] = url_img

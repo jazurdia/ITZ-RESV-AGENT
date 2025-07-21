@@ -1,11 +1,19 @@
 import asyncio
+import json
 from openai import OpenAI
-
-from aux_scripts.config import OPENAI_API_KEY
 
 from helper import load_context
 
-# Instancia del cliente OpenAI (versión >=1.0.0)
+from dotenv import load_dotenv
+import os
+
+# Carga variables de entorno desde .env
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise ValueError("Falta definir OPENAI_API_KEY en las variables de entorno")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 resv_columns = load_context("knowledge/reservations_columns.md")
@@ -64,7 +72,6 @@ async def chat_better_answers(agent_response: dict) -> str:
         "Eres un compañero experto en análisis de datos para el resort Itz'ana en Placencia, Belice, "
         "con un estilo conversacional, como si estuviéramos charlando sobre los números.\n\n"
         f"Contexto del negocio:\n{itzana_knowledge}\n\n"
-        f"Lo que devolvió el agente:\n{agent_response}\n\n"
         "Por favor, responde en formato Markdown siguiendo estas pautas:\n\n"
         "1. **Título**: Comienza con un título breve y relevante para el análisis.\n"
         "2. **Análisis libre**: Explica con tus palabras lo más relevante de los datos, "
@@ -73,10 +80,12 @@ async def chat_better_answers(agent_response: dict) -> str:
         "3. **Tabla de datos**: Incluye la tabla completa, con todos los datos presentes en returned_json. Si los datos no son relevantes, omite esta sección. Si lo son, muestra TODA la tabla. \n"
         "   Considera que si los datos son de revenue, estan siempre en dolares americanos (USD).\n Agregalo a la tabla. "
         "   Corrige el formato de los numeros, con comas como separador de miles y punto como separador decimal. "
+        "3.5 **Gráfica**: Si el agente generó una gráfica, incluye la imagen con la URL proporcionada en `graph_url`. "
         "4. **Recomendaciones**: Propón acciones concretas y prácticas basadas en los datos, "
-        "adaptadas al día a día del resort. Que sean claras, realistas y directamente aplicables. Solo haz esto si la data es suficiente para que sea útil. Si no, omite esta sección. \n"
-        "5. **Cierre**: Termina con un recordatorio de que solo se usó la información proporcionada y mantén siempre el tono cercano.\n\n"
+        "adaptadas al día a día del resort. Que sean claras, realistas y directamente aplicables. Solo haz esto si la data es suficiente para que sea útil. Deben ser bulletpoints. Si no, omite esta sección. \n"
+        "5. Termina con un recordatorio de que solo se usó la información proporcionada y mantén siempre el tono cercano.\n\n"
         "No inventes nada: usa únicamente la información proporcionada."
+
     )
 
     try:
@@ -84,8 +93,8 @@ async def chat_better_answers(agent_response: dict) -> str:
             client.chat.completions.create,
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "Eres un experto en análisis de datos y redacción profesional para el resort Itz'ana."},
-                {"role": "user", "content": prompt}
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": json.dumps(agent_response, indent=2) if isinstance(agent_response, dict) else agent_response}
             ],
             max_tokens=2000,
             temperature=0.7
