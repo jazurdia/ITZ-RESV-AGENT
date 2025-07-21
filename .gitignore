@@ -2,7 +2,6 @@ secrets.*
 secrets
 *.sqlite
 .idea
-*.db
 /backend/FileSection
 */.vite
 */temp
