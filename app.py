@@ -54,13 +54,13 @@ async def query_agent(request: QueryRequest):
         flag_graph = any(keyword in request.question.lower() for keyword in GRAPH_KEYWORDS)
 
         better_question = await chat_betterQuestions(request.question)
-        print(f"[DEBUG] - Pregunta mejorada: {better_question}")
+        # print(f"[DEBUG] - Pregunta mejorada: {better_question}")
 
         # 1) Llamas al agente SQL
         resp = await Runner.run(reservations_agent, better_question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
         table_data = raw.get("returned_json", [])
-        print(f"[DEBUG] - Datos de la tabla: {table_data}")
+        # print(f"[DEBUG] - Datos de la tabla: {table_data}")
 
         # second agent: Graph Generator Agent
         if flag_graph and raw.get("returned_json", []):  # Solo si hay datos en returned_json
@@ -74,7 +74,7 @@ async def query_agent(request: QueryRequest):
                 # llamada al agente de codigo para graficos
                 resp_graph = await Runner.run(graph_code_agent, json.dumps(graph_payload))
                 resp_graph_code = resp_graph.final_output["code"]
-                print(f"[DEBUG] - Código del agente de gráficos:\n{resp_graph_code}")
+                # print(f"[DEBUG] - Código del agente de gráficos:\n{resp_graph_code}")
 
                 # Ejecutar el código del agente de gráficos
                 url_img = execute_graph_agent_code(resp_graph_code, table_data)
@@ -86,9 +86,12 @@ async def query_agent(request: QueryRequest):
                 print(f"[ERROR] - Error al generar la gráfica: {e}")
 
         betterAnswers = await chat_better_answers(raw)
-        print(f"[DEBUG] - Respuesta mejorada: \n\n{betterAnswers}\n\n")
 
-        # print(f"\n[DEBUG] - Respuesta mejorada: \n------------------------\n\n{betterAnswers}")
+        # si betteranswers contiene "### Gráfica\n![Gráfica no disponible en este momento]"
+        if "### Gráfica\n![Gráfica no disponible en este momento]" in betterAnswers:
+            betterAnswers = betterAnswers.replace("### Gráfica\n![Gráfica no disponible en este momento]", "")
+
+        print(f"[DEBUG] - Respuesta mejorada: \n\n{betterAnswers}\n\n")
 
         return {"markdown" : betterAnswers}
         
