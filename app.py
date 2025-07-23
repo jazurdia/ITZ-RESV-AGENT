@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
 
-from ItzanaAgents import reservations_agent, graph_code_agent
+from agents_module import reservations_agent, graph_code_agent
 from agents import Runner
 from helper import execute_graph_agent_code
 from chat_module import chat_betterQuestions, chat_better_answers
@@ -51,16 +51,19 @@ GRAPH_KEYWORDS = [
 async def query_agent(request: QueryRequest):
     try:
 
+        print(f"[DEBUG] - Pregunta original: {request.question}")
+
         flag_graph = any(keyword in request.question.lower() for keyword in GRAPH_KEYWORDS)
 
         better_question = await chat_betterQuestions(request.question)
-        # print(f"[DEBUG] - Pregunta mejorada: {better_question}")
+        
+        print(f"[DEBUG] - Pregunta mejorada: {better_question}")
 
         # 1) Llamas al agente SQL
         resp = await Runner.run(reservations_agent, better_question)
         raw: Dict[str, Any] = resp.final_output  # dict con your analysis
         table_data = raw.get("returned_json", [])
-        # print(f"[DEBUG] - Datos de la tabla: {table_data}")
+        print(f"[DEBUG] - Datos de la tabla: {table_data}")
 
         # second agent: Graph Generator Agent
         if flag_graph and raw.get("returned_json", []):  # Solo si hay datos en returned_json

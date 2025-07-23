@@ -33,7 +33,7 @@ def execute_query_to_sqlite(query: str) -> Any:
     """Ejecuta la consulta SQL en Itzana.db y retorna resultados."""
     conn = None
 
-    # print(f"[DEBUG] - Consulta SQL generada por el agente:\n{query}")  # <-- Agrega este print
+    print(f"\n[DEBUG] - Consulta SQL generada por el agente:\n{query}")  # <-- Agrega este print
 
     try:
         conn = sqlite3.connect(get_db())

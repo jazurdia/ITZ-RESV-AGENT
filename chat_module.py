@@ -46,12 +46,12 @@ async def chat_betterQuestions(userQuery: str) -> str:
         # Ejecutamos la llamada síncrona en un hilo para no bloquear el event loop
         response = await asyncio.to_thread(
             client.chat.completions.create,
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": contexto},
                 {"role": "user",   "content": userQuery}
             ],
-            max_tokens=150,
+            max_tokens=2000,
             temperature=0.7
         )
         return response.choices[0].message.content.strip()
@@ -76,7 +76,8 @@ async def chat_better_answers(agent_response: dict) -> str:
         "Intenta siempre relacionar los datos con el contexto del negocio. Al responder es desable que complementes con informacion del contexto de negocio, pero no es obligatorio.\n\n"
         "Por favor, responde en formato Markdown siguiendo estas secciones si es adecuado:\n\n"
         "1. **Título**\n"
-        "   - Breve, claro y representativo del análisis.\n\n"
+        "   - Debe ser breve, claro y representativo del análisis.\n\n"
+        "   - El titulo no es 'titulo', sino que debes generar un titulo descriptivo de la respuesta.\n"
         "2. **Análisis**\n"
         "   - Comenta tendencias, anomalías, contexto, oportunidades y riesgos.\n"
         "   - Adapta el lenguaje al estilo conversacional; evita formatos rígidos.\n\n"
@@ -84,8 +85,8 @@ async def chat_better_answers(agent_response: dict) -> str:
         "   - Si los datos de `returned_json` son relevantes, incluye la tabla completa.\n"
         "   - Asegúrate de:\n"
         "     • Formatear números con comas para miles y punto para decimales.\n"
-        "     • Añadir columna “Moneda: USD” si aplica (revenue siempre en dólares).\n"
-        "   - Si no son útiles, omite esta sección.\n\n"
+        "   - Moneda: USD si aplica (revenue siempre en dólares).\n"
+        "   - Si no son útiles, omite esta sección.\n\n"    
         "   - Si hay una celda en la tabla que esta vacia, no incluyas esa fila en la tabla.\n"
         "4. **Gráfica**\n"
         "   - Si recibes `graph_url`, incrusta la imagen justo después de la tabla.\n"
@@ -106,7 +107,7 @@ async def chat_better_answers(agent_response: dict) -> str:
     try:
         response = await asyncio.to_thread(
             client.chat.completions.create,
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": json.dumps(agent_response, indent=2) if isinstance(agent_response, dict) else agent_response}
@@ -118,3 +119,15 @@ async def chat_better_answers(agent_response: dict) -> str:
     except Exception as e:
         print(f"Error al generar respuesta conversacional: {e}")
         return f"No se pudo generar la respuesta conversacional. {agent_response} "
+    
+
+async def chat_evaluate_questions(user_question:str) -> str:
+    """
+    Evalua la pregunta del usuario para determinar si es adecuada para el analisis de datos, o debe ser consultada en la web. 
+    """
+
+    prompt = (
+        "Tu tarea es evaluar la pregunta del usuario y determinar si es adecuada para el agente del analisis de datos y su worflow, "
+        "o si puede ser contestada con una busqueda en la web. "
+
+    )
