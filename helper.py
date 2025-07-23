@@ -125,7 +125,7 @@ def execute_graph_agent_code(code: str, table_data: list, output_file:str = "out
         "img_buf": img_buf
     }
 
-    print(f"[DEBUG] - Ejecutando código del agente de gráficos:\n{code}")
+    print(f"\n[DEBUG] - Ejecutando código del agente de gráficos:\n{code}\n")
     try:
         exec(code, exec_globals)
     except Exception as e:
@@ -135,6 +135,6 @@ def execute_graph_agent_code(code: str, table_data: list, output_file:str = "out
         raise ValueError("El código del agente de gráficos no generó una imagen válida.")
     
     public_url = upload_to_file_server(buf=img_buf)
-    print(f"[DEBUG] - Imagen subida correctamente: {public_url}")
+    # print(f"[DEBUG] - Imagen subida correctamente: {public_url}")
     return public_url
 

@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
 
-from ItzanaAgents import reservations_agent, graph_code_agent
+from agents_module import reservations_agent, graph_code_agent
 from agents import Runner
 from helper import execute_graph_agent_code
 from chat_module import chat_betterQuestions, chat_better_answers
@@ -51,9 +51,12 @@ GRAPH_KEYWORDS = [
 async def query_agent(request: QueryRequest):
     try:
 
+        print(f"[DEBUG] - Pregunta original: {request.question}")
+
         flag_graph = any(keyword in request.question.lower() for keyword in GRAPH_KEYWORDS)
 
         better_question = await chat_betterQuestions(request.question)
+        
         print(f"[DEBUG] - Pregunta mejorada: {better_question}")
 
         # 1) Llamas al agente SQL
@@ -74,7 +77,7 @@ async def query_agent(request: QueryRequest):
                 # llamada al agente de codigo para graficos
                 resp_graph = await Runner.run(graph_code_agent, json.dumps(graph_payload))
                 resp_graph_code = resp_graph.final_output["code"]
-                print(f"[DEBUG] - Código del agente de gráficos:\n{resp_graph_code}")
+                # print(f"[DEBUG] - Código del agente de gráficos:\n{resp_graph_code}")
 
                 # Ejecutar el código del agente de gráficos
                 url_img = execute_graph_agent_code(resp_graph_code, table_data)
@@ -86,9 +89,12 @@ async def query_agent(request: QueryRequest):
                 print(f"[ERROR] - Error al generar la gráfica: {e}")
 
         betterAnswers = await chat_better_answers(raw)
-        print(f"[DEBUG] - Respuesta mejorada: \n\n{betterAnswers}\n\n")
 
-        # print(f"\n[DEBUG] - Respuesta mejorada: \n------------------------\n\n{betterAnswers}")
+        # si betteranswers contiene "### Gráfica\n![Gráfica no disponible en este momento]"
+        if "### Gráfica\n![Gráfica no disponible en este momento]" in betterAnswers:
+            betterAnswers = betterAnswers.replace("### Gráfica\n![Gráfica no disponible en este momento]", "")
+
+        print(f"[DEBUG] - Respuesta mejorada: \n\n{betterAnswers}\n\n")
 
         return {"markdown" : betterAnswers}
         

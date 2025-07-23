@@ -46,12 +46,12 @@ async def chat_betterQuestions(userQuery: str) -> str:
         # Ejecutamos la llamada síncrona en un hilo para no bloquear el event loop
         response = await asyncio.to_thread(
             client.chat.completions.create,
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": contexto},
                 {"role": "user",   "content": userQuery}
             ],
-            max_tokens=150,
+            max_tokens=2000,
             temperature=0.7
         )
         return response.choices[0].message.content.strip()
@@ -71,27 +71,43 @@ async def chat_better_answers(agent_response: dict) -> str:
     prompt = (
         "Eres un compañero experto en análisis de datos para el resort Itz'ana en Placencia, Belice, "
         "con un estilo conversacional, como si estuviéramos charlando sobre los números.\n\n"
-        f"Contexto del negocio:\n{itzana_knowledge}\n\n"
-        "Por favor, responde en formato Markdown siguiendo estas pautas:\n\n"
-        "1. **Título**: Comienza con un título breve y relevante para el análisis.\n"
-        "2. **Análisis libre**: Explica con tus palabras lo más relevante de los datos, "
-        "puedes incluir tendencias, anomalías, contexto, oportunidades, riesgos, etc. "
-        "No sigas un formato rígido, adapta el análisis a lo que veas en los datos.\n"
-        "3. **Tabla de datos**: Incluye la tabla completa, con todos los datos presentes en returned_json. Si los datos no son relevantes, omite esta sección. Si lo son, muestra TODA la tabla. \n"
-        "   Considera que si los datos son de revenue, estan siempre en dolares americanos (USD).\n Agregalo a la tabla. "
-        "   Corrige el formato de los numeros, con comas como separador de miles y punto como separador decimal. "
-        "3.5 **Gráfica**: Si el agente generó una gráfica, incluye la imagen con la URL proporcionada en `graph_url`. "
-        "4. **Recomendaciones**: Propón acciones concretas y prácticas basadas en los datos, "
-        "adaptadas al día a día del resort. Que sean claras, realistas y directamente aplicables. Solo haz esto si la data es suficiente para que sea útil. Deben ser bulletpoints. Si no, omite esta sección. \n"
-        "5. Termina con un recordatorio de que solo se usó la información proporcionada y mantén siempre el tono cercano.\n\n"
-        "No inventes nada: usa únicamente la información proporcionada."
-
+        "Contexto del negocio:\n"
+        f"{itzana_knowledge}\n\n"
+        "Intenta siempre relacionar los datos con el contexto del negocio. Al responder es desable que complementes con informacion del contexto de negocio, pero no es obligatorio.\n\n"
+        "Por favor, responde en formato Markdown siguiendo estas secciones si es adecuado:\n\n"
+        "1. **Título**\n"
+        "   - Debe ser breve, claro y representativo del análisis.\n\n"
+        "   - El titulo no es 'titulo', sino que debes generar un titulo descriptivo de la respuesta.\n"
+        "2. **Análisis**\n"
+        "   - Comenta tendencias, anomalías, contexto, oportunidades y riesgos.\n"
+        "   - Adapta el lenguaje al estilo conversacional; evita formatos rígidos.\n\n"
+        "3. **Datos**\n"
+        "   - Si los datos de `returned_json` son relevantes, incluye la tabla completa.\n"
+        "   - Asegúrate de:\n"
+        "     • Formatear números con comas para miles y punto para decimales.\n"
+        "   - Moneda: USD si aplica (revenue siempre en dólares).\n"
+        "   - Si no son útiles, omite esta sección.\n\n"    
+        "   - Si hay una celda en la tabla que esta vacia, no incluyas esa fila en la tabla.\n"
+        "4. **Gráfica**\n"
+        "   - Si recibes `graph_url`, incrusta la imagen justo después de la tabla.\n"
+        "   - Si no hay URL, omite esta sección.\n\n"
+        "   - Si no hay url, nisiquiera menciones la grafica.\n"
+        "5. **Recomendaciones**\n"
+        "   - Usa la informacion del contexto de negocio y los datos analizados."
+        "   - Bullet points con acciones realistas para el día a día del resort.\n"
+        "   - Solo inclúyelas si los datos permiten sugerir algo útil.\n\n"
+        "   - Extiendete en esta seccion, pero no repitas lo que ya has dicho en el análisis.\n"
+        "6. \n"
+        "   - Recuerda que solo usaste la información proporcionada.\n"
+        "   - Mantén siempre un tono cercano y conversacional.\n\n"
+        "— No inventes nada: usa únicamente la información disponible."
     )
+
 
     try:
         response = await asyncio.to_thread(
             client.chat.completions.create,
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": json.dumps(agent_response, indent=2) if isinstance(agent_response, dict) else agent_response}
@@ -103,3 +119,15 @@ async def chat_better_answers(agent_response: dict) -> str:
     except Exception as e:
         print(f"Error al generar respuesta conversacional: {e}")
         return f"No se pudo generar la respuesta conversacional. {agent_response} "
+    
+
+async def chat_evaluate_questions(user_question:str) -> str:
+    """
+    Evalua la pregunta del usuario para determinar si es adecuada para el analisis de datos, o debe ser consultada en la web. 
+    """
+
+    prompt = (
+        "Tu tarea es evaluar la pregunta del usuario y determinar si es adecuada para el agente del analisis de datos y su worflow, "
+        "o si puede ser contestada con una busqueda en la web. "
+
+    )
